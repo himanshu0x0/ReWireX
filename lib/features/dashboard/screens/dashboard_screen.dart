@@ -32,6 +32,7 @@ import 'package:rewirex/features/dashboard/widgets/dashboard_cards.dart';
 // Other screens
 import 'package:rewirex/features/urge/screens/urge_log_screen.dart';
 import 'package:rewirex/features/profile/screens/profile_screen.dart';
+import 'package:rewirex/features/intervention/screens/coping_tools_screen.dart';
 import 'package:rewirex/navigation/app_drawer.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -44,20 +45,19 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
   // ── Services ───────────────────────────────────────────────
-  final StreakService _streakService = StreakService();
-  final RiskPredictionService _riskService = RiskPredictionService();
-  final RelapsePredictionService _relapseService = RelapsePredictionService();
-  final UrgePredictionService _urgePredictionService = UrgePredictionService();
-  final AIGuidanceService _aiService = AIGuidanceService();
-  final AIGuardianService _guardianService = AIGuardianService();
-  final RecoveryScoreService _recoveryService = RecoveryScoreService();
-  final PreRelapseWarningService _warningService = PreRelapseWarningService();
+  final StreakService             _streakService          = StreakService();
+  final RiskPredictionService     _riskService            = RiskPredictionService();
+  final RelapsePredictionService  _relapseService         = RelapsePredictionService();
+  final UrgePredictionService     _urgePredictionService  = UrgePredictionService();
+  final AIGuidanceService         _aiService              = AIGuidanceService();
+  final AIGuardianService         _guardianService        = AIGuardianService();
+  final RecoveryScoreService      _recoveryService        = RecoveryScoreService();
+  final PreRelapseWarningService  _warningService         = PreRelapseWarningService();
 
   // ── Animation ──────────────────────────────────────────────
   late AnimationController _fadeController;
-  late Animation<double> _fadeAnim;
+  late Animation<double>   _fadeAnim;
 
-  // Track when relapse is recorded to reset timer in child widget
   int _relapseResetKey = 0;
 
   @override
@@ -89,7 +89,27 @@ class _DashboardScreenState extends State<DashboardScreen>
       _showEmergencyReset();
     } else if (action == 'Open Coping Tools') {
       Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const UrgeLogScreen()));
+          context,
+          MaterialPageRoute(builder: (_) => const UrgeLogScreen()));
+    }
+  }
+
+  // ── Route the Pre-Relapse Warning action correctly ─────────
+  // The warning's actionLabel tells us exactly where to go:
+  //   'Start Emergency Reset'  → show the emergency dialog
+  //   'Open Coping Tools'      → navigate to CopingToolsScreen
+  //   'Do a Quick Check-In'    → navigate to CopingToolsScreen
+  void _handleWarningAction(PreRelapseWarningModel warning) {
+    if (warning.actionLabel == 'Start Emergency Reset') {
+      _showEmergencyReset();
+    } else {
+      // 'Open Coping Tools' or 'Do a Quick Check-In'
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CopingToolsScreen(warning: warning),
+        ),
+      );
     }
   }
 
@@ -102,14 +122,17 @@ class _DashboardScreenState extends State<DashboardScreen>
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('🚨 Emergency Reset',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Pause for a moment.',
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.75), height: 1.5)),
+                    color: Colors.white.withOpacity(0.75),
+                    height: 1.5,
+                    fontSize: 16)),
             const SizedBox(height: 12),
             ...[
               '• Take 5 deep breaths',
@@ -121,7 +144,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   child: Text(s,
                       style: TextStyle(
                           color: Colors.white.withOpacity(0.55),
-                          fontSize: 13)),
+                          fontSize: 15)),
                 )),
           ],
         ),
@@ -129,7 +152,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text("I'm Okay",
-                style: TextStyle(color: Color(0xFF6C63FF))),
+                style: TextStyle(
+                    color: Color(0xFF6C63FF), fontSize: 15)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -142,8 +166,8 @@ class _DashboardScreenState extends State<DashboardScreen>
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child:
-                const Text('Log Urge', style: TextStyle(color: Colors.white)),
+            child: const Text('Log Urge',
+                style: TextStyle(color: Colors.white, fontSize: 15)),
           ),
         ],
       ),
@@ -207,9 +231,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                       if (!snap.hasData || snap.data == null) {
                         return const SizedBox.shrink();
                       }
+                      final warning = snap.data!;
                       return PreRelapseWarningCard(
-                        warning: snap.data!,
-                        onStartPrevention: _showEmergencyReset,
+                        warning: warning,
+                        // ✅ Routes correctly based on severity
+                        onStartPrevention: () =>
+                            _handleWarningAction(warning),
                       );
                     },
                   ),
@@ -284,7 +311,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       backgroundColor: const Color(0xFF0D0D1A),
       elevation: 0,
       titleSpacing: 16,
-      // ── Hamburger (opens left drawer) ──────────────────
       leading: Builder(
         builder: (ctx) => IconButton(
           icon: Container(
@@ -294,7 +320,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(Icons.menu_rounded,
-                color: Colors.white.withOpacity(0.8), size: 18),
+                color: Colors.white.withOpacity(0.8), size: 20),
           ),
           tooltip: 'Menu',
           onPressed: () => Scaffold.of(ctx).openDrawer(),
@@ -307,14 +333,13 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: const Text(
           'ReWireX',
           style: TextStyle(
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: FontWeight.w800,
             color: Colors.white,
             letterSpacing: 0.8,
           ),
         ),
       ),
-      // ── Profile icon (replaces AI Coach) ───────────────
       actions: [
         IconButton(
           icon: Container(
@@ -324,7 +349,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               borderRadius: BorderRadius.circular(11),
             ),
             child: Icon(Icons.person_outline_rounded,
-                color: Colors.white.withOpacity(0.8), size: 18),
+                color: Colors.white.withOpacity(0.8), size: 20),
           ),
           tooltip: 'Profile',
           onPressed: () => Navigator.push(context,
@@ -352,7 +377,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           '$greeting $emoji',
           style: TextStyle(
             color: Colors.white.withOpacity(0.45),
-            fontSize: 14,
+            fontSize: 16,
             letterSpacing: 0.3,
           ),
         ),
@@ -361,7 +386,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           email ?? 'Welcome back',
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
           overflow: TextOverflow.ellipsis,
@@ -397,12 +422,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             onPressed: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const UrgeLogScreen())),
             icon: const Icon(Icons.flash_on_rounded,
-                color: Colors.white, size: 22),
+                color: Colors.white, size: 24),
             label: const Text(
               'I Feel an Urge',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 16,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.5,
               ),

@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/streak_model.dart';
 
-/// 🏆 Full milestone path bottom sheet
-/// Shows the complete "Path to Invincible" journey timeline.
-/// Triggered when user taps the MilestoneProgressCard.
-
-// ── Milestone definitions ─────────────────────────────────────
 class _MilestoneDef {
   final String rank;
   final String subtitle;
@@ -13,71 +8,22 @@ class _MilestoneDef {
   final IconData icon;
 
   const _MilestoneDef({
-    required this.rank,
-    required this.subtitle,
-    required this.days,
-    required this.icon,
+    required this.rank, required this.subtitle,
+    required this.days, required this.icon,
   });
 }
 
 const List<_MilestoneDef> kMilestonePath = [
-  _MilestoneDef(
-    rank: 'Awakened',
-    subtitle: 'The journey begins.',
-    days: 0,
-    icon: Icons.wb_twilight_rounded,
-  ),
-  _MilestoneDef(
-    rank: 'Seeker',
-    subtitle: 'Curiosity becomes commitment.',
-    days: 3,
-    icon: Icons.search_rounded,
-  ),
-  _MilestoneDef(
-    rank: 'Resolute',
-    subtitle: 'Your will is taking shape.',
-    days: 7,
-    icon: Icons.anchor_rounded,
-  ),
-  _MilestoneDef(
-    rank: 'Steadfast',
-    subtitle: 'Two weeks of unbroken resolve.',
-    days: 14,
-    icon: Icons.shield_outlined,
-  ),
-  _MilestoneDef(
-    rank: 'Ironclad',
-    subtitle: 'A month of forged discipline.',
-    days: 30,
-    icon: Icons.security_rounded,
-  ),
-  _MilestoneDef(
-    rank: 'Titan',
-    subtitle: 'You are built differently now.',
-    days: 60,
-    icon: Icons.fitness_center_rounded,
-  ),
-  _MilestoneDef(
-    rank: 'Sovereign',
-    subtitle: 'Three months — total self-mastery.',
-    days: 90,
-    icon: Icons.military_tech_rounded,
-  ),
-  _MilestoneDef(
-    rank: 'Ascendant',
-    subtitle: 'Half a year of transformation.',
-    days: 180,
-    icon: Icons.rocket_launch_rounded,
-  ),
-  _MilestoneDef(
-    rank: 'Invincible',
-    subtitle: 'A full year. Nothing can stop you.',
-    days: 365,
-    icon: Icons.auto_awesome,
-  ),
+  _MilestoneDef(rank: 'Awakened',   subtitle: 'The journey begins.',               days: 0,   icon: Icons.wb_twilight_rounded),
+  _MilestoneDef(rank: 'Seeker',     subtitle: 'Curiosity becomes commitment.',      days: 3,   icon: Icons.search_rounded),
+  _MilestoneDef(rank: 'Resolute',   subtitle: 'Your will is taking shape.',         days: 7,   icon: Icons.anchor_rounded),
+  _MilestoneDef(rank: 'Steadfast',  subtitle: 'Two weeks of unbroken resolve.',     days: 14,  icon: Icons.shield_outlined),
+  _MilestoneDef(rank: 'Ironclad',   subtitle: 'A month of forged discipline.',      days: 30,  icon: Icons.security_rounded),
+  _MilestoneDef(rank: 'Titan',      subtitle: 'You are built differently now.',     days: 60,  icon: Icons.fitness_center_rounded),
+  _MilestoneDef(rank: 'Sovereign',  subtitle: 'Three months — total self-mastery.', days: 90,  icon: Icons.military_tech_rounded),
+  _MilestoneDef(rank: 'Ascendant',  subtitle: 'Half a year of transformation.',     days: 180, icon: Icons.rocket_launch_rounded),
+  _MilestoneDef(rank: 'Invincible', subtitle: 'A full year. Nothing can stop you.', days: 365, icon: Icons.auto_awesome),
 ];
-
-// ── Show helper ───────────────────────────────────────────────
 
 void showMilestonePath(BuildContext context, StreakModel streak) {
   showModalBottomSheet(
@@ -88,11 +34,8 @@ void showMilestonePath(BuildContext context, StreakModel streak) {
   );
 }
 
-// ── Bottom sheet widget ───────────────────────────────────────
-
 class _MilestonePathSheet extends StatelessWidget {
   final StreakModel streak;
-
   const _MilestonePathSheet({required this.streak});
 
   int get _currentDays => streak.currentStreak;
@@ -111,12 +54,10 @@ class _MilestonePathSheet extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Drag handle
               const SizedBox(height: 12),
               Center(
                 child: Container(
-                  width: 40,
-                  height: 4,
+                  width: 40, height: 4,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(4),
@@ -124,29 +65,18 @@ class _MilestonePathSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-
-              // Header
               _buildHeader(context),
-
-              // Divider
-              Divider(
-                color: Colors.white.withOpacity(0.06),
-                height: 1,
-              ),
-
-              // Timeline list
+              Divider(color: Colors.white.withOpacity(0.06), height: 1),
               Expanded(
                 child: ListView.builder(
                   controller: scrollController,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                   itemCount: kMilestonePath.length,
                   itemBuilder: (_, i) {
-                    final milestone = kMilestonePath[i];
-                    final isLast = i == kMilestonePath.length - 1;
+                    final milestone  = kMilestonePath[i];
+                    final isLast      = i == kMilestonePath.length - 1;
                     final isCompleted = _currentDays >= milestone.days;
-                    final isCurrent = _isCurrentRank(i);
-
+                    final isCurrent   = _isCurrentRank(i);
                     return _TimelineItem(
                       milestone: milestone,
                       isCompleted: isCompleted,
@@ -166,9 +96,7 @@ class _MilestonePathSheet extends StatelessWidget {
 
   bool _isCurrentRank(int index) {
     for (int i = kMilestonePath.length - 1; i >= 0; i--) {
-      if (_currentDays >= kMilestonePath[i].days) {
-        return i == index;
-      }
+      if (_currentDays >= kMilestonePath[i].days) return i == index;
     }
     return index == 0;
   }
@@ -178,10 +106,8 @@ class _MilestonePathSheet extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 16, 16, 16),
       child: Row(
         children: [
-          // Icon
           Container(
-            width: 44,
-            height: 44,
+            width: 48, height: 48, // was 44
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)],
@@ -190,12 +116,9 @@ class _MilestonePathSheet extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.auto_awesome,
-                color: Colors.white, size: 20),
+            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22), // was 20
           ),
           const SizedBox(width: 14),
-
-          // Text
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,7 +127,7 @@ class _MilestonePathSheet extends StatelessWidget {
                   'The Path to Invincible',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: 19,        // was 18
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.3,
                   ),
@@ -213,25 +136,22 @@ class _MilestonePathSheet extends StatelessWidget {
                   'Your complete 365-day transformation.',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.4),
-                    fontSize: 12,
+                    fontSize: 13,        // was 12
                   ),
                 ),
               ],
             ),
           ),
-
-          // Close button
           GestureDetector(
             onTap: () => Navigator.pop(context),
             child: Container(
-              width: 34,
-              height: 34,
+              width: 36, height: 36,
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(Icons.close_rounded,
-                  color: Colors.white.withOpacity(0.5), size: 18),
+                  color: Colors.white.withOpacity(0.5), size: 19), // was 18
             ),
           ),
         ],
@@ -239,8 +159,6 @@ class _MilestonePathSheet extends StatelessWidget {
     );
   }
 }
-
-// ── Timeline item ─────────────────────────────────────────────
 
 class _TimelineItem extends StatelessWidget {
   final _MilestoneDef milestone;
@@ -250,11 +168,8 @@ class _TimelineItem extends StatelessWidget {
   final int currentDays;
 
   const _TimelineItem({
-    required this.milestone,
-    required this.isCompleted,
-    required this.isCurrent,
-    required this.isLast,
-    required this.currentDays,
+    required this.milestone, required this.isCompleted,
+    required this.isCurrent, required this.isLast, required this.currentDays,
   });
 
   @override
@@ -263,9 +178,8 @@ class _TimelineItem extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Left: icon + vertical line ──────────────────
           SizedBox(
-            width: 56,
+            width: 60, // was 56
             child: Column(
               children: [
                 _buildBadge(),
@@ -282,9 +196,7 @@ class _TimelineItem extends StatelessWidget {
                                 end: Alignment.bottomCenter,
                               )
                             : null,
-                        color: isCompleted
-                            ? null
-                            : Colors.white.withOpacity(0.08),
+                        color: isCompleted ? null : Colors.white.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -292,20 +204,13 @@ class _TimelineItem extends StatelessWidget {
               ],
             ),
           ),
-
           const SizedBox(width: 16),
-
-          // ── Right: rank info ─────────────────────────────
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(
-                bottom: isLast ? 8 : 28,
-                top: 4,
-              ),
+              padding: EdgeInsets.only(bottom: isLast ? 8 : 28, top: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Rank name + current badge
                   Row(
                     children: [
                       Text(
@@ -314,15 +219,14 @@ class _TimelineItem extends StatelessWidget {
                           color: isCompleted || isCurrent
                               ? Colors.white
                               : Colors.white.withOpacity(0.38),
-                          fontSize: 16,
+                          fontSize: 17,        // was 16
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       if (isCurrent) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)],
@@ -343,25 +247,21 @@ class _TimelineItem extends StatelessWidget {
                       if (isCompleted && !isCurrent) ...[
                         const SizedBox(width: 6),
                         const Icon(Icons.check_circle_rounded,
-                            color: Color(0xFF00C4A0), size: 15),
+                            color: Color(0xFF00C4A0), size: 16), // was 15
                       ],
                     ],
                   ),
                   const SizedBox(height: 3),
-
-                  // Subtitle
                   Text(
                     milestone.subtitle,
                     style: TextStyle(
                       color: Colors.white.withOpacity(
                           isCompleted || isCurrent ? 0.5 : 0.22),
-                      fontSize: 12,
+                      fontSize: 13,        // was 12
                       height: 1.4,
                     ),
                   ),
                   const SizedBox(height: 5),
-
-                  // Days requirement
                   Text(
                     'Requires ${milestone.days} day${milestone.days == 1 ? '' : 's'}',
                     style: TextStyle(
@@ -370,7 +270,7 @@ class _TimelineItem extends StatelessWidget {
                           : isCompleted
                               ? const Color(0xFF00C4A0).withOpacity(0.7)
                               : Colors.white.withOpacity(0.2),
-                      fontSize: 12,
+                      fontSize: 13,        // was 12
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -386,8 +286,7 @@ class _TimelineItem extends StatelessWidget {
   Widget _buildBadge() {
     if (isCurrent) {
       return Container(
-        width: 52,
-        height: 52,
+        width: 56, height: 56, // was 52
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: const LinearGradient(
@@ -398,46 +297,34 @@ class _TimelineItem extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: const Color(0xFF6C63FF).withOpacity(0.45),
-              blurRadius: 18,
-              offset: const Offset(0, 4),
+              blurRadius: 18, offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Icon(milestone.icon, color: Colors.white, size: 24),
+        child: Icon(milestone.icon, color: Colors.white, size: 26), // was 24
       );
     }
-
     if (isCompleted) {
       return Container(
-        width: 52,
-        height: 52,
+        width: 56, height: 56, // was 52
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: const Color(0xFF00C4A0).withOpacity(0.12),
-          border: Border.all(
-            color: const Color(0xFF00C4A0).withOpacity(0.4),
-            width: 1.5,
-          ),
+          border: Border.all(color: const Color(0xFF00C4A0).withOpacity(0.4), width: 1.5),
         ),
         child: Icon(milestone.icon,
-            color: const Color(0xFF00C4A0).withOpacity(0.8), size: 22),
+            color: const Color(0xFF00C4A0).withOpacity(0.8), size: 24), // was 22
       );
     }
-
-    // Locked
     return Container(
-      width: 52,
-      height: 52,
+      width: 56, height: 56, // was 52
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: Colors.white.withOpacity(0.04),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.08),
-          width: 1.5,
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.08), width: 1.5),
       ),
       child: Icon(milestone.icon,
-          color: Colors.white.withOpacity(0.2), size: 22),
+          color: Colors.white.withOpacity(0.2), size: 24), // was 22
     );
   }
 }

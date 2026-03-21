@@ -8,9 +8,9 @@ plugins {
 android {
     namespace = "com.example.rewirex"
 
-    // ✅ FIXED (avoid Flutter dynamic mismatch)
-    compileSdk = 34
-    ndkVersion = "26.1.10909125"
+    compileSdk = 36   // ✅ IMPORTANT
+
+    ndkVersion = "27.0.12077973"   // ✅ IMPORTANT
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -25,9 +25,8 @@ android {
     defaultConfig {
         applicationId = "com.example.rewirex"
 
-        // ✅ FIXED
         minSdk = flutter.minSdkVersion
-        targetSdk = 34
+        targetSdk = 34   // keep this
 
         versionCode = 1
         versionName = "1.0"

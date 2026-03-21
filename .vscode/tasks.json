@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "flutter pub get",
+      "command": "flutter",
+      "args": ["pub", "get"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    }
+  ]
+}

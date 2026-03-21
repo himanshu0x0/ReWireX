@@ -435,8 +435,9 @@ class AICoachBrain {
       // if map, try nested extraction
       if (raw is Map) {
         final extracted = _extractFromNestedMap(raw.cast<String, dynamic>());
-        if (extracted != null)
+        if (extracted != null) {
           return _safePercent({"v": extracted}, "v", fallback: fallback);
+        }
         return fallback;
       }
 

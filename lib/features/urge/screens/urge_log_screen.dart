@@ -759,14 +759,18 @@ class _UrgeLogScreenState extends State<UrgeLogScreen>
 
   String get _intensityDescription {
     final v = _intensity.toInt();
-    if (v <= 2)
+    if (v <= 2) {
       return 'A faint pull — you\'re in control and aware. Noticing it is a win.';
-    if (v <= 4)
+    }
+    if (v <= 4) {
       return 'Mild urge. Manageable with simple grounding or a distraction.';
-    if (v <= 6)
+    }
+    if (v <= 6) {
       return 'Noticeable tension. Your brain is signaling — let\'s redirect it.';
-    if (v <= 8)
+    }
+    if (v <= 8) {
       return 'Strong pull. Breathing and movement can help break the wave.';
+    }
     return 'Overwhelming. An emergency technique can help you get through this.';
   }
 

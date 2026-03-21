@@ -2,12 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:rewirex/features/ai/services/behavior_pattern_service.dart';
-import 'package:rewirex/features/ai/models/behavior_pattern_model.dart';
 import 'package:rewirex/features/stability/services/stability_service.dart';
-import 'package:rewirex/features/stability/models/stability_model.dart';
 import 'package:rewirex/features/analytics/services/habit_pattern_service.dart';
 import 'package:rewirex/features/prediction/services/relapse_prediction_service.dart';
-import 'package:rewirex/features/prediction/models/relapse_prediction_model.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -79,7 +76,8 @@ class _InsightsScreenState extends State<InsightsScreen>
       backgroundColor: const Color(0xFF0D0D1A),
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 18),
+        icon: const Icon(Icons.arrow_back_ios_rounded,
+            color: Colors.white, size: 20),        // was 18
         onPressed: () => Navigator.pop(context),
       ),
       title: ShaderMask(
@@ -87,7 +85,10 @@ class _InsightsScreenState extends State<InsightsScreen>
           colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)],
         ).createShader(bounds),
         child: const Text('AI Insights',
-            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,                       // was 20
+                fontWeight: FontWeight.w800)),
       ),
       actions: [
         Container(
@@ -96,13 +97,18 @@ class _InsightsScreenState extends State<InsightsScreen>
           decoration: BoxDecoration(
             color: const Color(0xFF6C63FF).withOpacity(0.15),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF6C63FF).withOpacity(0.3), width: 1),
+            border: Border.all(
+                color: const Color(0xFF6C63FF).withOpacity(0.3), width: 1),
           ),
           child: const Row(children: [
-            Icon(Icons.auto_awesome_rounded, color: Color(0xFF6C63FF), size: 13),
+            Icon(Icons.auto_awesome_rounded,
+                color: Color(0xFF6C63FF), size: 14),  // was 13
             SizedBox(width: 5),
             Text('AI Powered',
-                style: TextStyle(color: Color(0xFF6C63FF), fontSize: 11, fontWeight: FontWeight.w600)),
+                style: TextStyle(
+                    color: Color(0xFF6C63FF),
+                    fontSize: 12,                    // was 11
+                    fontWeight: FontWeight.w600)),
           ]),
         ),
       ],
@@ -112,7 +118,9 @@ class _InsightsScreenState extends State<InsightsScreen>
   Widget _sectionHeader(String label) => Text(label,
       style: TextStyle(
           color: Colors.white.withOpacity(0.35),
-          fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2.5));
+          fontSize: 12,                              // was 10
+          fontWeight: FontWeight.w700,
+          letterSpacing: 2.5));
 
   // ── AI Behavioral Pattern ──────────────────────────────────────
   Widget _buildBehaviorPatternCard() {
@@ -134,7 +142,8 @@ class _InsightsScreenState extends State<InsightsScreen>
         final trendColor = p.intensityTrend == 'Improving'
             ? const Color(0xFF00C853)
             : p.intensityTrend == 'Worsening'
-                ? const Color(0xFFE53935) : Colors.amber;
+                ? const Color(0xFFE53935)
+                : Colors.amber;
 
         return _InsightCard(
           accent: const Color(0xFF00C4A0),
@@ -142,16 +151,23 @@ class _InsightsScreenState extends State<InsightsScreen>
             Row(children: [
               _iconBox(Icons.psychology_outlined, const Color(0xFF00C4A0)),
               const SizedBox(width: 10),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('AI Behavioral Pattern',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16)),             // was 14
                 Text('Confidence: ${p.confidence}%',
-                    style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 12)),
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 13)),             // was 12
               ])),
               _confidenceBadge(p.confidence),
             ]),
             const SizedBox(height: 18),
-            _labeledRow('Detected Pattern', p.pattern, valueColor: const Color(0xFF6C63FF)),
+            _labeledRow('Detected Pattern', p.pattern,
+                valueColor: const Color(0xFF6C63FF)),
             const SizedBox(height: 12),
             _labeledRow('Primary Trigger', p.trigger),
             const SizedBox(height: 12),
@@ -159,7 +175,9 @@ class _InsightsScreenState extends State<InsightsScreen>
             const SizedBox(height: 12),
             Row(children: [
               Text('Intensity Trend  ',
-                  style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 12)),
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.45),
+                      fontSize: 13)),               // was 12
               _chip(p.intensityTrend, trendColor),
             ]),
             if (p.topCoPattern.isNotEmpty) ...[
@@ -169,13 +187,19 @@ class _InsightsScreenState extends State<InsightsScreen>
                 decoration: BoxDecoration(
                   color: const Color(0xFF00C4A0).withOpacity(0.07),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF00C4A0).withOpacity(0.15), width: 1),
+                  border: Border.all(
+                      color: const Color(0xFF00C4A0).withOpacity(0.15), width: 1),
                 ),
                 child: Row(children: [
-                  const Icon(Icons.link_rounded, color: Color(0xFF00C4A0), size: 14),
+                  const Icon(Icons.link_rounded,
+                      color: Color(0xFF00C4A0), size: 16), // was 14
                   const SizedBox(width: 8),
-                  Expanded(child: Text('Co-pattern: ${p.topCoPattern}',
-                      style: const TextStyle(color: Color(0xFF00C4A0), fontSize: 12, fontWeight: FontWeight.w600))),
+                  Expanded(child: Text(
+                      'Co-pattern: ${p.topCoPattern}',
+                      style: const TextStyle(
+                          color: Color(0xFF00C4A0),
+                          fontSize: 13,              // was 12
+                          fontWeight: FontWeight.w600))),
                 ]),
               ),
             ],
@@ -183,10 +207,14 @@ class _InsightsScreenState extends State<InsightsScreen>
             const Divider(color: Colors.white12),
             const SizedBox(height: 12),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Icon(Icons.tips_and_updates_outlined, color: Color(0xFF6C63FF), size: 15),
+              const Icon(Icons.tips_and_updates_outlined,
+                  color: Color(0xFF6C63FF), size: 17), // was 15
               const SizedBox(width: 8),
               Expanded(child: Text(p.recommendation,
-                  style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13, height: 1.5))),
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.65),
+                      fontSize: 14,                  // was 13
+                      height: 1.5))),
             ]),
           ]),
         );
@@ -207,7 +235,8 @@ class _InsightsScreenState extends State<InsightsScreen>
         final color = s.level == 'High'
             ? const Color(0xFF00C853)
             : s.level == 'Moderate'
-                ? const Color(0xFF6C63FF) : const Color(0xFFE53935);
+                ? const Color(0xFF6C63FF)
+                : const Color(0xFFE53935);
 
         return _InsightCard(
           accent: color,
@@ -215,37 +244,52 @@ class _InsightsScreenState extends State<InsightsScreen>
             Row(children: [
               _iconBox(Icons.balance_rounded, color),
               const SizedBox(width: 10),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Behavioral Stability',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16)),             // was 14
                 Text('${s.trend} pattern',
-                    style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 12)),
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 13)),             // was 12
               ])),
               _chip(s.level, color),
             ]),
             const SizedBox(height: 20),
             Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text(s.score.toStringAsFixed(0),
-                  style: TextStyle(color: color, fontSize: 52,
-                      fontWeight: FontWeight.w800, height: 1.0)),
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 56,                 // was 52
+                      fontWeight: FontWeight.w800,
+                      height: 1.0)),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8, left: 4),
                 child: Text('/100',
-                    style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16)),
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.3),
+                        fontSize: 17)),             // was 16
               ),
             ]),
             const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
-                value: s.score / 100, minHeight: 6,
+                value: s.score / 100,
+                minHeight: 7,                       // was 6
                 backgroundColor: Colors.white.withOpacity(0.07),
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
             const SizedBox(height: 14),
             Text(s.explanation,
-                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13, height: 1.5)),
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 14,                   // was 13
+                    height: 1.5)),
           ]),
         );
       },
@@ -270,11 +314,17 @@ class _InsightsScreenState extends State<InsightsScreen>
               _iconBox(Icons.hub_outlined, Colors.indigo),
               const SizedBox(width: 10),
               const Text('Behavioral Pattern Insight',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16)),               // was 14
             ]),
             const SizedBox(height: 16),
             Text(p.insight,
-                style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13, height: 1.6)),
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.65),
+                    fontSize: 14,                   // was 13
+                    height: 1.6)),
             const SizedBox(height: 14),
             Wrap(spacing: 8, runSpacing: 8, children: [
               _metaChip('🎭 ${p.dominantEmotion}'),
@@ -308,53 +358,73 @@ class _InsightsScreenState extends State<InsightsScreen>
             Row(children: [
               _iconBox(Icons.warning_amber_rounded, color),
               const SizedBox(width: 10),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Relapse Risk Analysis',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16)),             // was 14
                 Text('Confidence: ${(pred.confidenceScore * 100).toStringAsFixed(0)}%',
-                    style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 12)),
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.45),
+                        fontSize: 13)),             // was 12
               ])),
               _chip(pred.level, color),
             ]),
             const SizedBox(height: 20),
             Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text('${pred.probability.toStringAsFixed(0)}%',
-                  style: TextStyle(color: color, fontSize: 52,
-                      fontWeight: FontWeight.w800, height: 1.0)),
+                  style: TextStyle(
+                      color: color,
+                      fontSize: 56,                 // was 52
+                      fontWeight: FontWeight.w800,
+                      height: 1.0)),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8, left: 8),
                 child: Text('probability',
-                    style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14)),
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.3),
+                        fontSize: 15)),             // was 14
               ),
             ]),
             const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
-                value: pred.probability / 100, minHeight: 6,
+                value: pred.probability / 100,
+                minHeight: 7,                       // was 6
                 backgroundColor: Colors.white.withOpacity(0.07),
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
             const SizedBox(height: 14),
             Text(pred.reason,
-                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13, height: 1.5)),
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 14,                   // was 13
+                    height: 1.5)),
             if (pred.warningSignals.isNotEmpty) ...[
               const SizedBox(height: 14),
               const Divider(color: Colors.white12),
               const SizedBox(height: 10),
               Text('WARNING SIGNALS',
-                  style: TextStyle(color: Colors.white.withOpacity(0.35),
-                      fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2.0)),
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.35),
+                      fontSize: 11,                // was 10
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2.0)),
               const SizedBox(height: 8),
               ...pred.warningSignals.take(3).map((s) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(children: [
-                  Icon(Icons.circle, color: color, size: 6),
+                  Icon(Icons.circle, color: color, size: 7),  // was 6
                   const SizedBox(width: 10),
                   Expanded(child: Text(s,
-                      style: TextStyle(color: Colors.white.withOpacity(0.55),
-                          fontSize: 12, height: 1.4))),
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.55),
+                          fontSize: 13,            // was 12
+                          height: 1.4))),
                 ]),
               )),
             ],
@@ -369,7 +439,8 @@ class _InsightsScreenState extends State<InsightsScreen>
     accent: accent,
     child: const SizedBox(height: 60,
         child: Center(child: SizedBox(width: 22, height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white38)))),
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: Colors.white38)))),
   );
 
   Widget _emptyCard({required IconData icon, required Color accent,
@@ -377,74 +448,92 @@ class _InsightsScreenState extends State<InsightsScreen>
     _InsightCard(
       accent: accent,
       child: Row(children: [
-        Icon(icon, color: accent.withOpacity(0.5), size: 32),
+        Icon(icon, color: accent.withOpacity(0.5), size: 34),  // was 32
         const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title, style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 15)),                        // was 13
           const SizedBox(height: 4),
           Text(message, style: TextStyle(
-              color: Colors.white.withOpacity(0.4), fontSize: 12, height: 1.4)),
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 13,                          // was 12
+              height: 1.4)),
         ])),
       ]),
     );
 
   Widget _iconBox(IconData icon, Color color) => Container(
-    padding: const EdgeInsets.all(8),
+    padding: const EdgeInsets.all(9),               // was 8
     decoration: BoxDecoration(
-        color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-    child: Icon(icon, color: color, size: 16),
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10)),
+    child: Icon(icon, color: color, size: 18),       // was 16
   );
 
   Widget _chip(String label, Color color) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(20),
+      color: color.withOpacity(0.12),
+      borderRadius: BorderRadius.circular(20),
       border: Border.all(color: color.withOpacity(0.25), width: 1),
     ),
     child: Text(label, style: TextStyle(
-        color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+        color: color,
+        fontSize: 12,                                // was 11
+        fontWeight: FontWeight.w700)),
   );
 
   Widget _metaChip(String label) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),  // was 10,5
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(20),
+      color: Colors.white.withOpacity(0.05),
+      borderRadius: BorderRadius.circular(20),
       border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
     ),
     child: Text(label, style: TextStyle(
-        color: Colors.white.withOpacity(0.55), fontSize: 11, fontWeight: FontWeight.w600)),
+        color: Colors.white.withOpacity(0.55),
+        fontSize: 12,                                // was 11
+        fontWeight: FontWeight.w600)),
   );
 
   Widget _confidenceBadge(int confidence) {
     final color = confidence >= 70 ? const Color(0xFF00C853)
-        : confidence >= 40 ? Colors.amber : Colors.red;
-    return SizedBox(width: 44, height: 44,
+        : confidence >= 40           ? Colors.amber
+        :                              Colors.red;
+    return SizedBox(width: 48, height: 48,           // was 44
       child: Stack(alignment: Alignment.center, children: [
         CircularProgressIndicator(
-          value: confidence / 100, strokeWidth: 3,
+          value: confidence / 100,
+          strokeWidth: 3,
           backgroundColor: Colors.white.withOpacity(0.07),
           valueColor: AlwaysStoppedAnimation<Color>(color),
         ),
         Text('$confidence', style: TextStyle(
-            color: color, fontSize: 11, fontWeight: FontWeight.w800)),
+            color: color,
+            fontSize: 12,                            // was 11
+            fontWeight: FontWeight.w800)),
       ]),
     );
   }
 
   Widget _labeledRow(String label, String value, {Color? valueColor}) =>
     Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SizedBox(width: 110,
+      SizedBox(width: 115,                           // was 110
         child: Text(label, style: TextStyle(
-            color: Colors.white.withOpacity(0.45), fontSize: 12))),
+            color: Colors.white.withOpacity(0.45),
+            fontSize: 13))),                         // was 12
       Expanded(child: Text(value, style: TextStyle(
           color: valueColor ?? Colors.white,
-          fontWeight: FontWeight.w600, fontSize: 13))),
+          fontWeight: FontWeight.w600,
+          fontSize: 14))),                           // was 13
     ]);
 }
 
 class _InsightCard extends StatelessWidget {
-  final Color accent;
+  final Color  accent;
   final Widget child;
   const _InsightCard({required this.accent, required this.child});
 
@@ -458,7 +547,9 @@ class _InsightCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: accent.withOpacity(0.18), width: 1),
         boxShadow: [BoxShadow(
-            color: accent.withOpacity(0.06), blurRadius: 20, offset: const Offset(0, 4))],
+            color: accent.withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 4))],
       ),
       child: child,
     );

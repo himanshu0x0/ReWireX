@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Publicly exported enum so other files can reference the result.
 enum CheckInResult { confirmed, relapsed, cancelled }
 
-/// ✅ Check-In Confirmation Dialog
-/// Shows a beautiful confirmation with 3 actions:
-/// Confirm Check-in / I Relapsed (leads to relapse flow) / Cancel
 Future<CheckInResult?> showCheckInDialog(BuildContext context) {
   return showDialog<CheckInResult>(
     context: context,
@@ -34,14 +30,8 @@ class _CheckInDialogState extends State<_CheckInDialog>
       vsync: this,
       duration: const Duration(milliseconds: 380),
     )..forward();
-    _scaleAnim = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    );
-    _fadeAnim = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    );
+    _scaleAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+    _fadeAnim  = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
   }
 
   @override
@@ -63,8 +53,7 @@ class _CheckInDialogState extends State<_CheckInDialog>
             decoration: BoxDecoration(
               color: const Color(0xFF161625),
               borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                  color: Colors.white.withOpacity(0.08), width: 1),
+              border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.5),
@@ -82,19 +71,15 @@ class _CheckInDialogState extends State<_CheckInDialog>
                   padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
                   decoration: BoxDecoration(
                     color: const Color(0xFF00C4A0).withOpacity(0.07),
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28)),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                     border: Border(
-                      bottom: BorderSide(
-                          color: Colors.white.withOpacity(0.05), width: 1),
+                      bottom: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
                     ),
                   ),
                   child: Column(
                     children: [
-                      // Animated checkmark icon
                       Container(
-                        width: 68,
-                        height: 68,
+                        width: 72, height: 72, // was 68
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: const Color(0xFF00C4A0).withOpacity(0.12),
@@ -106,7 +91,7 @@ class _CheckInDialogState extends State<_CheckInDialog>
                         child: const Icon(
                           Icons.check_circle_outline_rounded,
                           color: Color(0xFF00C4A0),
-                          size: 34,
+                          size: 36, // was 34
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -114,7 +99,7 @@ class _CheckInDialogState extends State<_CheckInDialog>
                         'Confirm Check-In',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 20,
+                          fontSize: 22,        // was 20
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.3,
                         ),
@@ -125,7 +110,7 @@ class _CheckInDialogState extends State<_CheckInDialog>
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.45),
-                          fontSize: 13,
+                          fontSize: 14,        // was 13
                           height: 1.6,
                         ),
                       ),
@@ -141,20 +126,19 @@ class _CheckInDialogState extends State<_CheckInDialog>
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.03),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.06), width: 1),
+                      border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
                     ),
                     child: Row(
                       children: [
                         const Icon(Icons.emoji_events_outlined,
-                            color: Color(0xFF00C4A0), size: 18),
+                            color: Color(0xFF00C4A0), size: 20), // was 18
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'Were you clean today? Commit honestly.',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.55),
-                              fontSize: 12,
+                              fontSize: 13,        // was 12
                               height: 1.4,
                             ),
                           ),
@@ -169,7 +153,6 @@ class _CheckInDialogState extends State<_CheckInDialog>
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   child: Column(
                     children: [
-                      // Confirm
                       _DialogButton(
                         label: '✅  Confirm Check-In',
                         color: const Color(0xFF00C4A0),
@@ -177,8 +160,6 @@ class _CheckInDialogState extends State<_CheckInDialog>
                             Navigator.pop(context, CheckInResult.confirmed),
                       ),
                       const SizedBox(height: 10),
-
-                      // I Relapsed
                       _DialogButton(
                         label: '⚠️  I Relapsed Today',
                         color: const Color(0xFFE53935),
@@ -187,8 +168,6 @@ class _CheckInDialogState extends State<_CheckInDialog>
                         outlined: true,
                       ),
                       const SizedBox(height: 10),
-
-                      // Cancel
                       GestureDetector(
                         onTap: () =>
                             Navigator.pop(context, CheckInResult.cancelled),
@@ -198,7 +177,7 @@ class _CheckInDialogState extends State<_CheckInDialog>
                             'Cancel',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.35),
-                              fontSize: 14,
+                              fontSize: 15,        // was 14
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -215,8 +194,6 @@ class _CheckInDialogState extends State<_CheckInDialog>
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────
 
 class _DialogButton extends StatelessWidget {
   final String label;
@@ -236,20 +213,19 @@ class _DialogButton extends StatelessWidget {
     if (outlined) {
       return SizedBox(
         width: double.infinity,
-        height: 50,
+        height: 54, // was 50
         child: OutlinedButton(
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(
             side: BorderSide(color: color.withOpacity(0.6), width: 1.5),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
           child: Text(
             label,
             style: TextStyle(
               color: color,
               fontWeight: FontWeight.w700,
-              fontSize: 14,
+              fontSize: 15,        // was 14
             ),
           ),
         ),
@@ -257,7 +233,7 @@ class _DialogButton extends StatelessWidget {
     }
     return SizedBox(
       width: double.infinity,
-      height: 50,
+      height: 54, // was 50
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
@@ -275,15 +251,14 @@ class _DialogButton extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
           child: Text(
             label,
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w700,
-              fontSize: 14,
+              fontSize: 15,        // was 14
             ),
           ),
         ),

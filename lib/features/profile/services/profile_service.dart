@@ -1,7 +1,12 @@
 // lib/features/profile/services/profile_service.dart
 
+import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';   // ← add this line
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path/path.dart' as p;
 
 /// 👤 Profile Model
 class ProfileModel {
@@ -10,10 +15,10 @@ class ProfileModel {
   final String displayName;
   final String username;
   final String bio;
-  final String photoUrl;
-  final String recoveryGoal;       // e.g. "90 days clean"
-  final String addictionType;      // e.g. "Alcohol", "Pornography"
-  final String sobrietyStartDate;  // ISO string
+  final String photoUrl;       // holds an https:// URL  OR  a base64 data URI
+  final String recoveryGoal;
+  final String addictionType;
+  final String sobrietyStartDate;
   final String gender;
   final String dateOfBirth;
   final String country;
@@ -43,8 +48,17 @@ class ProfileModel {
     this.updatedAt         = null,
   });
 
-  /// Completion score 0–100.
-  /// Each completed field contributes a weighted share.
+  /// Returns true when the photo is a remote URL (https://...)
+  bool get hasNetworkPhoto =>
+      photoUrl.isNotEmpty && photoUrl.startsWith('http');
+
+  /// Returns true when the photo is an inline base64 data URI
+  bool get hasBase64Photo =>
+      photoUrl.isNotEmpty && photoUrl.startsWith('data:image');
+
+  /// True if any displayable photo is available
+  bool get hasPhoto => hasNetworkPhoto || hasBase64Photo;
+
   int get completionScore {
     final fields = <String, int>{
       displayName:       15,
@@ -66,7 +80,6 @@ class ProfileModel {
     return score.clamp(0, 100);
   }
 
-  /// Fields still empty — used to show specific prompts.
   List<String> get missingFields {
     final out = <String>[];
     if (displayName.isEmpty)       out.add('Full name');
@@ -147,17 +160,27 @@ class ProfileModel {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
 /// 👤 Profile Service
+/// Uses Base64 encoding stored in Firestore — NO Firebase Storage needed.
+// ─────────────────────────────────────────────────────────────
 class ProfileService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth      _auth      = FirebaseAuth.instance;
+
+  // Firestore doc limit is 1 MB.
+  // We compress to 200×200 JPEG at quality 70 → ~15–40 KB → safe.
+  static const int _targetSize   = 200;
+  static const int _jpegQuality  = 70;
+
+  // Firestore max document size guard (800 KB to stay well under 1 MB)
+  static const int _maxBase64Bytes = 800 * 1024;
 
   DocumentReference<Map<String, dynamic>> get _ref {
     final uid = _auth.currentUser!.uid;
     return _firestore.collection('users').doc(uid);
   }
 
-  /// Real-time stream of the current user's profile.
   Stream<ProfileModel?> getProfile() {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(null);
@@ -167,7 +190,6 @@ class ProfileService {
     });
   }
 
-  /// One-shot fetch.
   Future<ProfileModel?> fetchProfile() async {
     final user = _auth.currentUser;
     if (user == null) return null;
@@ -176,24 +198,82 @@ class ProfileService {
     return ProfileModel.fromMap(snap.data()!, user.uid);
   }
 
-  /// Save / merge profile fields.
   Future<void> saveProfile(ProfileModel profile) async {
     final map = profile.toMap();
-    // Preserve createdAt if already set
     await _ref.set({'createdAt': FieldValue.serverTimestamp()},
         SetOptions(merge: true));
     await _ref.set(map, SetOptions(merge: true));
   }
 
-  /// Update a single field without loading the whole profile.
   Future<void> updateField(String field, dynamic value) async {
     await _ref.update({field: value, 'updatedAt': Timestamp.now()});
   }
 
-  /// Delete account data (does NOT delete Firebase Auth user — handle separately).
+  /// Converts a local image file to a Base64 data URI and saves it
+  /// directly in the Firestore user document under [photoUrl].
+  ///
+  /// Supports jpg, jpeg, png, gif, webp, bmp, heic, heif.
+  /// The image is compressed to 200×200 JPEG before encoding so it
+  /// always stays well under Firestore's 1 MB document limit.
+  ///
+  /// Returns the base64 data URI string (starts with "data:image/jpeg;base64,").
+  Future<String> uploadProfilePhoto(String localPath) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('User not logged in.');
+
+    final file = File(localPath);
+    if (!await file.exists()) {
+      throw Exception('Selected image file not found: $localPath');
+    }
+
+    // ── Step 1: Compress to small JPEG ────────────────────
+    final ext = p.extension(localPath).toLowerCase();
+
+    // flutter_image_compress supports jpg, png, webp, heic, heif.
+    // For gif/bmp we fall back to reading the raw bytes (already small).
+    Uint8List compressedBytes;
+
+    if (['.gif', '.bmp'].contains(ext)) {
+      // Read raw bytes — GIFs & BMPs are typically small already
+      compressedBytes = await file.readAsBytes();
+    } else {
+      final result = await FlutterImageCompress.compressWithFile(
+        localPath,
+        minWidth:  _targetSize,
+        minHeight: _targetSize,
+        quality:   _jpegQuality,
+        format:    CompressFormat.jpeg,
+      );
+      if (result == null) {
+        throw Exception('Image compression failed for: $localPath');
+      }
+      compressedBytes = result;
+    }
+
+    // ── Step 2: Guard against oversized result ─────────────
+    if (compressedBytes.length > _maxBase64Bytes) {
+      throw Exception(
+        'Compressed image is too large '
+        '(${(compressedBytes.length / 1024).toStringAsFixed(0)} KB). '
+        'Please choose a smaller image.',
+      );
+    }
+
+    // ── Step 3: Encode to Base64 data URI ──────────────────
+    final base64Str  = base64Encode(compressedBytes);
+    final mimeType   = ['.gif'].contains(ext) ? 'image/gif' : 'image/jpeg';
+    final dataUri    = 'data:$mimeType;base64,$base64Str';
+
+    // ── Step 4: Save to Firestore ──────────────────────────
+    await updateField('photoUrl', dataUri);
+
+    return dataUri;
+  }
+
   Future<void> deleteAccountData() async {
     final user = _auth.currentUser;
     if (user == null) return;
+    // With Base64 approach there's nothing in Storage to clean up
     await _firestore.collection('users').doc(user.uid).delete();
   }
 }

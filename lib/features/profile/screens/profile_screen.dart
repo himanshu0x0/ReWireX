@@ -1,5 +1,6 @@
 // lib/features/profile/screens/profile_screen.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,7 +21,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   late Animation<double>   _fadeAnim;
 
   ProfileModel? _profile;
-  bool _loading = true;
+  bool _loading        = true;
+  bool _uploadingPhoto = false;
 
   @override
   void initState() {
@@ -28,7 +30,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     _fadeController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500))
       ..forward();
-    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeAnim =
+        CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
     _loadProfile();
   }
 
@@ -43,7 +46,28 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (mounted) setState(() { _profile = p; _loading = false; });
   }
 
-  // ── Pick profile photo ────────────────────────────────────
+  // ── Compress → Base64 → Firestore ─────────────────────────
+  Future<void> _uploadAndSavePhoto(String localPath) async {
+    if (!mounted) return;
+    setState(() => _uploadingPhoto = true);
+    try {
+      await _service.uploadProfilePhoto(localPath);
+      await _loadProfile();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save photo: $e'),
+            backgroundColor: const Color(0xFFE53935),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
+  // ── Pick profile photo ─────────────────────────────────────
   Future<void> _pickProfilePhoto() async {
     await showModalBottomSheet(
       context: context,
@@ -72,7 +96,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                     color: Colors.white,
                     fontSize: 17,
                     fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(
+              'Supported: JPG, PNG, WEBP, HEIC, GIF, BMP',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.35), fontSize: 11),
+            ),
             const SizedBox(height: 16),
+
+            // ── Gallery ──────────────────────────────────────
             _PhotoOptionTile(
               icon: Icons.photo_library_outlined,
               label: 'Choose from Gallery',
@@ -81,17 +113,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Navigator.pop(context);
                 final picked = await ImagePicker().pickImage(
                   source: ImageSource.gallery,
-                  maxWidth: 512,
-                  maxHeight: 512,
-                  imageQuality: 85,
+                  maxWidth: 1024,
+                  maxHeight: 1024,
+                  imageQuality: 90,
                 );
-                if (picked != null) {
-                  await _service.updateField('photoUrl', picked.path);
-                  await _loadProfile();
-                }
+                if (picked != null) await _uploadAndSavePhoto(picked.path);
               },
             ),
             const SizedBox(height: 10),
+
+            // ── Camera ───────────────────────────────────────
             _PhotoOptionTile(
               icon: Icons.camera_alt_outlined,
               label: 'Take a Photo',
@@ -100,17 +131,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Navigator.pop(context);
                 final picked = await ImagePicker().pickImage(
                   source: ImageSource.camera,
-                  maxWidth: 512,
-                  maxHeight: 512,
-                  imageQuality: 85,
+                  maxWidth: 1024,
+                  maxHeight: 1024,
+                  imageQuality: 90,
                 );
-                if (picked != null) {
-                  await _service.updateField('photoUrl', picked.path);
-                  await _loadProfile();
-                }
+                if (picked != null) await _uploadAndSavePhoto(picked.path);
               },
             ),
             const SizedBox(height: 10),
+
+            // ── URL ──────────────────────────────────────────
             _PhotoOptionTile(
               icon: Icons.link_rounded,
               label: 'Enter Photo URL',
@@ -168,7 +198,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _PickerSheet(title: title, options: options, current: current),
+      builder: (_) =>
+          _PickerSheet(title: title, options: options, current: current),
     );
     if (picked == null) return;
     await _service.updateField(field, picked);
@@ -213,14 +244,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     await _loadProfile();
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D1A),
       appBar: _buildAppBar(),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF6C63FF), strokeWidth: 2.5))
+          ? const Center(
+              child: CircularProgressIndicator(
+                  color: Color(0xFF6C63FF), strokeWidth: 2.5))
           : FadeTransition(
               opacity: _fadeAnim,
               child: SingleChildScrollView(
@@ -228,37 +260,24 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
-                    // ── Profile completion banner ─────────────
                     if (_profile != null && _profile!.completionScore < 100)
                       _CompletionBanner(profile: _profile!),
-
                     if (_profile != null && _profile!.completionScore < 100)
                       const SizedBox(height: 20),
-
-                    // ── Avatar + name ─────────────────────────
                     _buildAvatarSection(),
                     const SizedBox(height: 24),
-
-                    // ── Personal Info ─────────────────────────
                     _sectionHeader('PERSONAL INFORMATION'),
                     const SizedBox(height: 12),
                     _buildPersonalInfoCard(),
                     const SizedBox(height: 20),
-
-                    // ── Recovery Info ─────────────────────────
                     _sectionHeader('RECOVERY PROFILE'),
                     const SizedBox(height: 12),
                     _buildRecoveryCard(),
                     const SizedBox(height: 20),
-
-                    // ── App Settings ──────────────────────────
                     _sectionHeader('APP SETTINGS'),
                     const SizedBox(height: 12),
                     _buildSettingsCard(),
                     const SizedBox(height: 20),
-
-                    // ── Account ───────────────────────────────
                     _sectionHeader('ACCOUNT'),
                     const SizedBox(height: 12),
                     _buildAccountCard(),
@@ -292,7 +311,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         ).createShader(bounds),
         child: const Text('My Profile',
             style: TextStyle(
-                color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800)),
+                color: Colors.white,
+                fontSize: 21,
+                fontWeight: FontWeight.w800)),
       ),
       actions: [
         if (_profile != null)
@@ -300,7 +321,8 @@ class _ProfileScreenState extends State<ProfileScreen>
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(20),
@@ -330,7 +352,13 @@ class _ProfileScreenState extends State<ProfileScreen>
         ? _profile!.displayName
         : (user?.email ?? 'User');
     final initials = name.trim().isNotEmpty
-        ? name.trim().split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase()
+        ? name
+            .trim()
+            .split(' ')
+            .map((w) => w.isNotEmpty ? w[0] : '')
+            .take(2)
+            .join()
+            .toUpperCase()
         : 'U';
 
     return Center(
@@ -338,41 +366,52 @@ class _ProfileScreenState extends State<ProfileScreen>
         children: [
           Stack(
             children: [
+              // ── Avatar circle ─────────────────────────────
               Container(
-                width: 90, height: 90,
+                width: 90,
+                height: 90,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
-                  ),
+                  gradient: (_profile?.hasPhoto == true)
+                      ? null
+                      : const LinearGradient(
+                          colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFF6C63FF).withOpacity(0.35),
-                      blurRadius: 24, offset: const Offset(0, 8),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
-                child: Center(
-                  child: Text(initials,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 33,
-                          fontWeight: FontWeight.w800)),
-                ),
+                child: ClipOval(child: _buildAvatarChild(initials)),
               ),
-              // Edit badge
+
+              // ── Edit badge ────────────────────────────────
               Positioned(
                 bottom: 0, right: 0,
                 child: GestureDetector(
-                  onTap: _pickProfilePhoto,
+                  onTap: _uploadingPhoto ? null : _pickProfilePhoto,
                   child: Container(
                     width: 28, height: 28,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF6C63FF),
+                      color: _uploadingPhoto
+                          ? Colors.grey
+                          : const Color(0xFF6C63FF),
                       shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF0D0D1A), width: 2),
+                      border: Border.all(
+                          color: const Color(0xFF0D0D1A), width: 2),
                     ),
-                    child: const Icon(Icons.edit_rounded, color: Colors.white, size: 13),
+                    child: Icon(
+                      _uploadingPhoto
+                          ? Icons.hourglass_top_rounded
+                          : Icons.edit_rounded,
+                      color: Colors.white,
+                      size: 13,
+                    ),
                   ),
                 ),
               ),
@@ -380,32 +419,111 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            _profile?.displayName.isNotEmpty == true ? _profile!.displayName : 'Add your name',
+            _profile?.displayName.isNotEmpty == true
+                ? _profile!.displayName
+                : 'Add your name',
             style: TextStyle(
               color: _profile?.displayName.isNotEmpty == true
                   ? Colors.white
                   : Colors.white.withOpacity(0.35),
-              fontSize: 21, fontWeight: FontWeight.w700,
+              fontSize: 21,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 4),
           Text(user?.email ?? '',
-              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13)),
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.4), fontSize: 13)),
           if (_profile?.username.isNotEmpty == true) ...[
             const SizedBox(height: 2),
             Text('@${_profile!.username}',
-                style: const TextStyle(color: Color(0xFF6C63FF), fontSize: 13)),
+                style: const TextStyle(
+                    color: Color(0xFF6C63FF), fontSize: 13)),
           ],
         ],
       ),
     );
   }
 
+  // ── Decides what to render inside the avatar ClipOval ──────
+  Widget _buildAvatarChild(String initials) {
+    // While uploading — show spinner
+    if (_uploadingPhoto) {
+      return Container(
+        width: 90, height: 90,
+        color: const Color(0xFF6C63FF).withOpacity(0.3),
+        child: const Center(
+          child: CircularProgressIndicator(
+              color: Colors.white, strokeWidth: 2.5),
+        ),
+      );
+    }
+
+    final photoUrl = _profile?.photoUrl ?? '';
+
+    // Base64 data URI  (stored in Firestore, no Storage needed)
+    if (_profile?.hasBase64Photo == true) {
+      try {
+        // Strip the  "data:image/jpeg;base64,"  prefix
+        final base64Data = photoUrl.split(',').last;
+        final bytes = base64Decode(base64Data);
+        return Image.memory(
+          bytes,
+          width: 90, height: 90,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _initialsWidget(initials),
+        );
+      } catch (_) {
+        return _initialsWidget(initials);
+      }
+    }
+
+    // HTTPS URL  (manual URL entry or migrated from old Storage)
+    if (_profile?.hasNetworkPhoto == true) {
+      return Image.network(
+        photoUrl,
+        width: 90, height: 90,
+        fit: BoxFit.cover,
+        loadingBuilder: (_, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            width: 90, height: 90,
+            color: const Color(0xFF6C63FF).withOpacity(0.25),
+            child: Center(
+              child: CircularProgressIndicator(
+                value: progress.expectedTotalBytes != null
+                    ? progress.cumulativeBytesLoaded /
+                        progress.expectedTotalBytes!
+                    : null,
+                color: Colors.white,
+                strokeWidth: 2.5,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) => _initialsWidget(initials),
+      );
+    }
+
+    // No photo — show initials
+    return _initialsWidget(initials);
+  }
+
+  Widget _initialsWidget(String initials) => Center(
+        child: Text(initials,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 33,
+                fontWeight: FontWeight.w800)),
+      );
+
   // ── Section header ─────────────────────────────────────────
   Widget _sectionHeader(String label) => Text(label,
       style: TextStyle(
           color: Colors.white.withOpacity(0.35),
-          fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2.5));
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 2.5));
 
   // ── Personal Info Card ─────────────────────────────────────
   Widget _buildPersonalInfoCard() {
@@ -446,7 +564,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           onTap: () => _editDropdown(
               title: 'Gender', field: 'gender',
               current: _profile?.gender ?? '',
-              options: ['Male', 'Female', 'Non-binary', 'Prefer not to say']),
+              options: [
+                'Male', 'Female', 'Non-binary', 'Prefer not to say'
+              ]),
         ),
         _ProfileRow(
           icon: Icons.cake_rounded,
@@ -517,7 +637,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           label: 'Push Notifications',
           value: _profile?.notificationsEnabled ?? true,
           onChanged: () => _toggleBool(
-              'notificationsEnabled', _profile?.notificationsEnabled ?? true),
+              'notificationsEnabled',
+              _profile?.notificationsEnabled ?? true),
         ),
         _ToggleRow(
           icon: Icons.shield_outlined,
@@ -525,7 +646,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           subtitle: 'AI alerts when risk is critical',
           value: _profile?.guardianModeEnabled ?? true,
           onChanged: () => _toggleBool(
-              'guardianModeEnabled', _profile?.guardianModeEnabled ?? true),
+              'guardianModeEnabled',
+              _profile?.guardianModeEnabled ?? true),
           isLast: true,
         ),
       ],
@@ -547,7 +669,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               hint: '+91 XXXXXXXXXX',
               keyboardType: TextInputType.phone),
         ),
-
         _ActionRow(
           icon: Icons.delete_outline_rounded,
           label: 'Delete Account',
@@ -565,22 +686,30 @@ class _ProfileScreenState extends State<ProfileScreen>
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF161625),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete Account?',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700)),
         content: Text(
-          'All your data including streaks, urge logs, and recovery progress will be permanently deleted.',
-          style: TextStyle(color: Colors.white.withOpacity(0.6), height: 1.5),
+          'All your data including streaks, urge logs, and recovery '
+          'progress will be permanently deleted.',
+          style:
+              TextStyle(color: Colors.white.withOpacity(0.6), height: 1.5),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel', style: TextStyle(color: Color(0xFF6C63FF)))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: Color(0xFF6C63FF)))),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE53935),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -624,12 +753,16 @@ class _CompletionBanner extends StatelessWidget {
               child: Text(
                 'Your profile is $score% complete',
                 style: TextStyle(
-                    color: color, fontWeight: FontWeight.w700, fontSize: 14),
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14),
               ),
             ),
             Text('$score%',
                 style: TextStyle(
-                    color: color, fontSize: 19, fontWeight: FontWeight.w800)),
+                    color: color,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800)),
           ]),
           const SizedBox(height: 10),
           ClipRRect(
@@ -644,9 +777,12 @@ class _CompletionBanner extends StatelessWidget {
           if (missing.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              'Missing: ${missing.take(3).join(', ')}${missing.length > 3 ? '…' : ''}',
+              'Missing: ${missing.take(3).join(', ')}'
+              '${missing.length > 3 ? '…' : ''}',
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.5), fontSize: 13, height: 1.4),
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 13,
+                  height: 1.4),
             ),
           ],
         ],
@@ -670,7 +806,8 @@ class _ProfileCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF141428),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.07), width: 1),
+        border:
+            Border.all(color: Colors.white.withOpacity(0.07), width: 1),
       ),
       child: Column(children: children),
     );
@@ -701,7 +838,8 @@ class _ProfileRow extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             child: Row(children: [
               Container(
                 padding: const EdgeInsets.all(8),
@@ -709,7 +847,8 @@ class _ProfileRow extends StatelessWidget {
                   color: const Color(0xFF6C63FF).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: const Color(0xFF6C63FF), size: 16),
+                child: Icon(icon,
+                    color: const Color(0xFF6C63FF), size: 16),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -718,7 +857,8 @@ class _ProfileRow extends StatelessWidget {
                   children: [
                     Text(label,
                         style: TextStyle(
-                            color: Colors.white.withOpacity(0.45), fontSize: 11)),
+                            color: Colors.white.withOpacity(0.45),
+                            fontSize: 11)),
                     const SizedBox(height: 2),
                     Text(
                       isEmpty ? 'Tap to add' : value,
@@ -738,8 +878,11 @@ class _ProfileRow extends StatelessWidget {
             ]),
           ),
           if (!isLast)
-            Divider(height: 1, color: Colors.white.withOpacity(0.05),
-                indent: 56, endIndent: 18),
+            Divider(
+                height: 1,
+                color: Colors.white.withOpacity(0.05),
+                indent: 56,
+                endIndent: 18),
         ],
       ),
     );
@@ -768,7 +911,8 @@ class _ToggleRow extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
           child: Row(children: [
             Container(
               padding: const EdgeInsets.all(8),
@@ -776,7 +920,8 @@ class _ToggleRow extends StatelessWidget {
                 color: const Color(0xFF00C4A0).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: const Color(0xFF00C4A0), size: 16),
+              child: Icon(icon,
+                  color: const Color(0xFF00C4A0), size: 16),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -784,11 +929,13 @@ class _ToggleRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label,
-                      style: const TextStyle(color: Colors.white, fontSize: 14)),
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 14)),
                   if (subtitle != null)
                     Text(subtitle!,
                         style: TextStyle(
-                            color: Colors.white.withOpacity(0.38), fontSize: 11)),
+                            color: Colors.white.withOpacity(0.38),
+                            fontSize: 11)),
                 ],
               ),
             ),
@@ -802,8 +949,11 @@ class _ToggleRow extends StatelessWidget {
           ]),
         ),
         if (!isLast)
-          Divider(height: 1, color: Colors.white.withOpacity(0.05),
-              indent: 56, endIndent: 18),
+          Divider(
+              height: 1,
+              color: Colors.white.withOpacity(0.05),
+              indent: 56,
+              endIndent: 18),
       ],
     );
   }
@@ -836,7 +986,8 @@ class _ActionRow extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             child: Row(children: [
               Container(
                 padding: const EdgeInsets.all(8),
@@ -859,7 +1010,8 @@ class _ActionRow extends StatelessWidget {
                     if (value?.isNotEmpty == true)
                       Text(value!,
                           style: TextStyle(
-                              color: Colors.white.withOpacity(0.4), fontSize: 12)),
+                              color: Colors.white.withOpacity(0.4),
+                              fontSize: 12)),
                   ],
                 ),
               ),
@@ -868,8 +1020,11 @@ class _ActionRow extends StatelessWidget {
             ]),
           ),
           if (!isLast)
-            Divider(height: 1, color: Colors.white.withOpacity(0.05),
-                indent: 56, endIndent: 18),
+            Divider(
+                height: 1,
+                color: Colors.white.withOpacity(0.05),
+                indent: 56,
+                endIndent: 18),
         ],
       ),
     );
@@ -890,8 +1045,8 @@ class _EditSheet extends StatelessWidget {
   const _EditSheet({
     required this.title,
     required this.controller,
-    this.hint      = '',
-    this.maxLines  = 1,
+    this.hint         = '',
+    this.maxLines     = 1,
     this.keyboardType = TextInputType.text,
   });
 
@@ -907,7 +1062,6 @@ class _EditSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Handle
           Center(
             child: Container(
               width: 36, height: 4,
@@ -920,7 +1074,9 @@ class _EditSheet extends StatelessWidget {
           const SizedBox(height: 20),
           Text(title,
               style: const TextStyle(
-                  color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           TextField(
             controller: controller,
@@ -930,22 +1086,27 @@ class _EditSheet extends StatelessWidget {
             style: const TextStyle(color: Colors.white, fontSize: 15),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.25)),
+              hintStyle:
+                  TextStyle(color: Colors.white.withOpacity(0.25)),
               filled: true,
               fillColor: Colors.white.withOpacity(0.05),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                borderSide:
+                    BorderSide(color: Colors.white.withOpacity(0.1)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                borderSide:
+                    BorderSide(color: Colors.white.withOpacity(0.1)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: Color(0xFF6C63FF), width: 1.5),
+                borderSide: const BorderSide(
+                    color: Color(0xFF6C63FF), width: 1.5),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
             ),
           ),
           const SizedBox(height: 16),
@@ -959,7 +1120,8 @@ class _EditSheet extends StatelessWidget {
                     colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)]),
               ),
               child: ElevatedButton(
-                onPressed: () => Navigator.pop(context, controller.text),
+                onPressed: () =>
+                    Navigator.pop(context, controller.text),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
@@ -968,7 +1130,9 @@ class _EditSheet extends StatelessWidget {
                 ),
                 child: const Text('Save',
                     style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15)),
               ),
             ),
           ),
@@ -1015,44 +1179,47 @@ class _PickerSheet extends StatelessWidget {
           const SizedBox(height: 20),
           Text(title,
               style: const TextStyle(
-                  color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           ...options.map((opt) => GestureDetector(
-            onTap: () => Navigator.pop(context, opt),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: opt == current
-                    ? const Color(0xFF6C63FF).withOpacity(0.15)
-                    : Colors.white.withOpacity(0.04),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: opt == current
-                      ? const Color(0xFF6C63FF).withOpacity(0.5)
-                      : Colors.white.withOpacity(0.08),
-                  width: 1,
+                onTap: () => Navigator.pop(context, opt),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: opt == current
+                        ? const Color(0xFF6C63FF).withOpacity(0.15)
+                        : Colors.white.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: opt == current
+                          ? const Color(0xFF6C63FF).withOpacity(0.5)
+                          : Colors.white.withOpacity(0.08),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(opt,
+                          style: TextStyle(
+                              color: opt == current
+                                  ? const Color(0xFF6C63FF)
+                                  : Colors.white,
+                              fontSize: 15,
+                              fontWeight: opt == current
+                                  ? FontWeight.w700
+                                  : FontWeight.w400)),
+                    ),
+                    if (opt == current)
+                      const Icon(Icons.check_rounded,
+                          color: Color(0xFF6C63FF), size: 18),
+                  ]),
                 ),
-              ),
-              child: Row(children: [
-                Expanded(
-                  child: Text(opt,
-                      style: TextStyle(
-                          color: opt == current
-                              ? const Color(0xFF6C63FF)
-                              : Colors.white,
-                          fontSize: 15,
-                          fontWeight: opt == current
-                              ? FontWeight.w700
-                              : FontWeight.w400)),
-                ),
-                if (opt == current)
-                  const Icon(Icons.check_rounded,
-                      color: Color(0xFF6C63FF), size: 18),
-              ]),
-            ),
-          )),
+              )),
         ],
       ),
     );
@@ -1080,7 +1247,8 @@ class _PhotoOptionTile extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         decoration: BoxDecoration(
           color: color.withOpacity(0.07),
           borderRadius: BorderRadius.circular(14),
@@ -1096,7 +1264,7 @@ class _PhotoOptionTile extends StatelessWidget {
           ),
           const SizedBox(width: 14),
           Text(label,
-              style: TextStyle(
+              style: const TextStyle(
                   color: Colors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.w600)),

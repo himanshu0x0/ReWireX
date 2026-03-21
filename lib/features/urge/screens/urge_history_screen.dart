@@ -51,10 +51,12 @@ class _UrgeHistoryScreenState extends State<UrgeHistoryScreen>
     setState(() => _statsLoading = true);
     try {
       final stats = await _urgeService.getUrgeStats(days: _filterDays);
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _stats = stats;
         _statsLoading = false;
       });
+      }
     } catch (_) {
       if (mounted) setState(() => _statsLoading = false);
     }
@@ -65,11 +67,14 @@ class _UrgeHistoryScreenState extends State<UrgeHistoryScreen>
     final cutoff = DateTime.now().subtract(Duration(days: _filterDays));
     return urges.where((u) {
       if (u.timestamp.isBefore(cutoff)) return false;
-      if (_filterEmotion != 'All' && u.emotion != _filterEmotion)
+      if (_filterEmotion != 'All' && u.emotion != _filterEmotion) {
         return false;
+      }
       if (_filterIntensity == 'Low' && u.intensity > 3) return false;
       if (_filterIntensity == 'Medium' &&
-          (u.intensity < 4 || u.intensity > 6)) return false;
+          (u.intensity < 4 || u.intensity > 6)) {
+        return false;
+      }
       if (_filterIntensity == 'High' && u.intensity < 7) return false;
       return true;
     }).toList();

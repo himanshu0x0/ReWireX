@@ -8,14 +8,14 @@ class StreakModel {
   final int longestStreak;
   final int totalRelapses;
   final DateTime? lastRelapseDate;
-  final DateTime startDate;
-  final DateTime updatedAt;
+  final DateTime startDate;    // ← when this streak began (used by timer)
+  final DateTime updatedAt;    // ← last write time (NOT used by timer)
 
   // Extended analytics
   final double streakHealthScore;
-  final int daysToNextMilestone;
+  final int    daysToNextMilestone;
   final String nextMilestoneName;
-  final bool isPersonalBest;
+  final bool   isPersonalBest;
 
   StreakModel({
     required this.currentStreak,
@@ -24,10 +24,10 @@ class StreakModel {
     this.lastRelapseDate,
     required this.startDate,
     required this.updatedAt,
-    this.streakHealthScore = 0,
+    this.streakHealthScore   = 0,
     this.daysToNextMilestone = 0,
-    this.nextMilestoneName = '',
-    this.isPersonalBest = false,
+    this.nextMilestoneName   = '',
+    this.isPersonalBest      = false,
   });
 
   factory StreakModel.fromMap(Map<String, dynamic> data) {
@@ -35,19 +35,33 @@ class StreakModel {
     final longest  = (data['longestStreak']  as num?)?.toInt() ?? 0;
     final relapses = (data['totalRelapses']  as num?)?.toInt() ?? 0;
 
+    // ── startDate: when the current streak began ──────────────
+    // Always derive from currentStreak count to guarantee timer accuracy.
+    // Stored startDate can be wrong if it was set at check-in time (not midnight).
+    // Formula: startDate = midnight of (today - (currentStreak - 1) days)
+    // e.g. 1 day streak → startDate = today midnight
+    //      12 day streak → startDate = 11 days ago midnight
+    final now   = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDate = current > 0
+        ? today.subtract(Duration(days: current - 1))
+        : today;
+
+    final updatedAt = data['updatedAt'] != null
+        ? (data['updatedAt'] as Timestamp).toDate()
+        : DateTime.now();
+
     final milestone   = _nextMilestone(current);
     final healthScore = _computeHealthScore(current, longest, relapses);
 
     return StreakModel(
-      currentStreak:  current,
-      longestStreak:  longest,
-      totalRelapses:  relapses,
-      lastRelapseDate: data['lastRelapseDate'] != null
+      currentStreak:       current,
+      longestStreak:       longest,
+      totalRelapses:       relapses,
+      lastRelapseDate:     data['lastRelapseDate'] != null
           ? (data['lastRelapseDate'] as Timestamp).toDate() : null,
-      startDate: data['startDate'] != null
-          ? (data['startDate'] as Timestamp).toDate() : DateTime.now(),
-      updatedAt: data['updatedAt'] != null
-          ? (data['updatedAt'] as Timestamp).toDate() : DateTime.now(),
+      startDate:           startDate,
+      updatedAt:           updatedAt,
       streakHealthScore:   healthScore,
       daysToNextMilestone: milestone.days,
       nextMilestoneName:   milestone.name,
@@ -55,7 +69,7 @@ class StreakModel {
     );
   }
 
-  // Milestone system (matches milestone_path_sheet.dart ranks)
+  // ── Milestone system ──────────────────────────────────────────
   static ({int days, String name}) _nextMilestone(int current) {
     const milestones = [
       (3,   'Seeker'),

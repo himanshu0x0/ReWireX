@@ -2,11 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/streak_model.dart';
 import 'milestone_path_sheet.dart';
 
-/// 🏆 Milestone Progress Card
-/// Tappable — opens the full "Path to Invincible" bottom sheet.
 class MilestoneProgressCard extends StatelessWidget {
   final StreakModel streak;
-
   const MilestoneProgressCard({super.key, required this.streak});
 
   static const List<_Milestone> _milestones = [
@@ -24,25 +21,18 @@ class MilestoneProgressCard extends StatelessWidget {
   _MilestoneInfo _getInfo(int currentDays) {
     int currentIndex = 0;
     for (int i = _milestones.length - 1; i >= 0; i--) {
-      if (currentDays >= _milestones[i].days) {
-        currentIndex = i;
-        break;
-      }
+      if (currentDays >= _milestones[i].days) { currentIndex = i; break; }
     }
     final nextIndex = (currentIndex + 1).clamp(0, _milestones.length - 1);
-    final current = _milestones[currentIndex];
-    final next = _milestones[nextIndex];
+    final current   = _milestones[currentIndex];
+    final next      = _milestones[nextIndex];
     final bool isMax = currentIndex == _milestones.length - 1;
     final double progress = isMax
         ? 1.0
-        : ((currentDays - current.days) / (next.days - current.days))
-            .clamp(0.0, 1.0);
+        : ((currentDays - current.days) / (next.days - current.days)).clamp(0.0, 1.0);
     return _MilestoneInfo(
-      current: current,
-      next: next,
-      progress: progress,
-      daysToNext: isMax ? 0 : next.days - currentDays,
-      isMax: isMax,
+      current: current, next: next, progress: progress,
+      daysToNext: isMax ? 0 : next.days - currentDays, isMax: isMax,
     );
   }
 
@@ -70,7 +60,7 @@ class MilestoneProgressCard extends StatelessWidget {
                   'MILESTONE PROGRESS',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.45),
-                    fontSize: 11,
+                    fontSize: 12,        // was 11
                     fontWeight: FontWeight.w600,
                     letterSpacing: 2.5,
                   ),
@@ -82,7 +72,7 @@ class MilestoneProgressCard extends StatelessWidget {
                       'View path',
                       style: TextStyle(
                         color: const Color(0xFF6C63FF).withOpacity(0.85),
-                        fontSize: 12,
+                        fontSize: 13,    // was 12
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -90,7 +80,7 @@ class MilestoneProgressCard extends StatelessWidget {
                     Icon(
                       Icons.chevron_right_rounded,
                       color: const Color(0xFF6C63FF).withOpacity(0.75),
-                      size: 16,
+                      size: 18,          // was 16
                     ),
                   ],
                 ),
@@ -110,19 +100,19 @@ class MilestoneProgressCard extends StatelessWidget {
                       Text(info.current.rank,
                           style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 16,
+                              fontSize: 17,        // was 16
                               fontWeight: FontWeight.w700)),
                       Text('Current',
                           style: TextStyle(
                               color: Colors.white.withOpacity(0.38),
-                              fontSize: 12)),
+                              fontSize: 13)),      // was 12
                     ],
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 22),
                   child: Icon(Icons.arrow_forward_rounded,
-                      color: Colors.white.withOpacity(0.2), size: 22),
+                      color: Colors.white.withOpacity(0.2), size: 24), // was 22
                 ),
                 Expanded(
                   child: Column(
@@ -130,19 +120,18 @@ class MilestoneProgressCard extends StatelessWidget {
                     children: [
                       Align(
                         alignment: Alignment.centerRight,
-                        child:
-                            _RankBadge(icon: info.next.icon, isActive: false),
+                        child: _RankBadge(icon: info.next.icon, isActive: false),
                       ),
                       const SizedBox(height: 10),
                       Text(info.next.rank,
                           style: TextStyle(
                               color: Colors.white.withOpacity(0.5),
-                              fontSize: 16,
+                              fontSize: 17,        // was 16
                               fontWeight: FontWeight.w700)),
                       Text(info.isMax ? 'Max Rank 👑' : 'Next',
                           style: TextStyle(
                               color: Colors.white.withOpacity(0.32),
-                              fontSize: 12)),
+                              fontSize: 13)),      // was 12
                     ],
                   ),
                 ),
@@ -157,14 +146,15 @@ class MilestoneProgressCard extends StatelessWidget {
               children: [
                 Text('Progress to next rank',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.4), fontSize: 12)),
+                        color: Colors.white.withOpacity(0.4),
+                        fontSize: 13)),  // was 12
                 Text(
                   info.isMax
                       ? 'Max reached! 🎉'
                       : '${streak.currentStreak} / ${info.next.days} Days',
                   style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 12,
+                      fontSize: 13,      // was 12
                       fontWeight: FontWeight.w600),
                 ),
               ],
@@ -180,10 +170,9 @@ class MilestoneProgressCard extends StatelessWidget {
                 curve: Curves.easeOutCubic,
                 builder: (_, value, __) => LinearProgressIndicator(
                   value: value,
-                  minHeight: 8,
+                  minHeight: 9,        // was 8
                   backgroundColor: Colors.white.withOpacity(0.08),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFF6C63FF)),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6C63FF)),
                 ),
               ),
             ),
@@ -193,13 +182,13 @@ class MilestoneProgressCard extends StatelessWidget {
               Row(
                 children: [
                   const Icon(Icons.bolt_rounded,
-                      color: Color(0xFF00C4A0), size: 14),
+                      color: Color(0xFF00C4A0), size: 15), // was 14
                   const SizedBox(width: 4),
                   Text(
                     '${info.daysToNext} more day${info.daysToNext == 1 ? '' : 's'} to ${info.next.rank}',
                     style: const TextStyle(
                         color: Color(0xFF00C4A0),
-                        fontSize: 12,
+                        fontSize: 13,    // was 12
                         fontWeight: FontWeight.w500),
                   ),
                 ],
@@ -220,8 +209,7 @@ class _RankBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 52,
-      height: 52,
+      width: 56, height: 56, // was 52
       decoration: isActive
           ? BoxDecoration(
               shape: BoxShape.circle,
@@ -233,20 +221,18 @@ class _RankBadge extends StatelessWidget {
               boxShadow: [
                 BoxShadow(
                   color: const Color(0xFF6C63FF).withOpacity(0.38),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+                  blurRadius: 16, offset: const Offset(0, 4),
                 ),
               ],
             )
           : BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white.withOpacity(0.05),
-              border: Border.all(
-                  color: Colors.white.withOpacity(0.1), width: 1.5),
+              border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.5),
             ),
       child: Icon(icon,
           color: isActive ? Colors.white : Colors.white.withOpacity(0.3),
-          size: 26),
+          size: 28),  // was 26
     );
   }
 }
@@ -265,10 +251,7 @@ class _MilestoneInfo {
   final int daysToNext;
   final bool isMax;
   const _MilestoneInfo({
-    required this.current,
-    required this.next,
-    required this.progress,
-    required this.daysToNext,
-    required this.isMax,
+    required this.current, required this.next, required this.progress,
+    required this.daysToNext, required this.isMax,
   });
 }

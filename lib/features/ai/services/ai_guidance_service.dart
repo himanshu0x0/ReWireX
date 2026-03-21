@@ -4,7 +4,6 @@ import '../../risk/services/risk_prediction_service.dart';
 import '../../prediction/services/relapse_prediction_service.dart';
 import '../../stability/services/stability_service.dart';
 import '../models/ai_guidance_model.dart';
-import '../models/ai_memory_model.dart';
 import 'ai_memory_service.dart';
 
 export '../models/ai_guidance_model.dart';

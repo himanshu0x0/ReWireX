@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// 🚨 Relapse Confirmation Dialog
-/// Two-step confirmation to prevent accidental streak resets.
 Future<bool> showRelapseDialog(BuildContext context) async {
   final result = await showDialog<bool>(
     context: context,
@@ -31,10 +29,8 @@ class _RelapseDialogState extends State<_RelapseDialog>
       vsync: this,
       duration: const Duration(milliseconds: 380),
     )..forward();
-    _scaleAnim =
-        CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
-    _fadeAnim =
-        CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _scaleAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+    _fadeAnim  = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
   }
 
   @override
@@ -75,43 +71,37 @@ class _RelapseDialogState extends State<_RelapseDialog>
                   padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
                   decoration: BoxDecoration(
                     color: const Color(0xFFE53935).withOpacity(0.06),
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28)),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                     border: Border(
-                      bottom: BorderSide(
-                          color: Colors.white.withOpacity(0.05), width: 1),
+                      bottom: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
                     ),
                   ),
                   child: Column(
                     children: [
-                      // Warning icon with ring
                       Stack(
                         alignment: Alignment.center,
                         children: [
                           Container(
-                            width: 72,
-                            height: 72,
+                            width: 76, height: 76, // was 72
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: const Color(0xFFE53935).withOpacity(0.08),
                             ),
                           ),
                           Container(
-                            width: 56,
-                            height: 56,
+                            width: 60, height: 60, // was 56
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: const Color(0xFFE53935).withOpacity(0.12),
                               border: Border.all(
-                                color:
-                                    const Color(0xFFE53935).withOpacity(0.3),
+                                color: const Color(0xFFE53935).withOpacity(0.3),
                                 width: 1.5,
                               ),
                             ),
                             child: const Icon(
                               Icons.warning_amber_rounded,
                               color: Color(0xFFE53935),
-                              size: 28,
+                              size: 30, // was 28
                             ),
                           ),
                         ],
@@ -121,7 +111,7 @@ class _RelapseDialogState extends State<_RelapseDialog>
                         'Report Relapse?',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 20,
+                          fontSize: 22,        // was 20
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.3,
                         ),
@@ -132,7 +122,7 @@ class _RelapseDialogState extends State<_RelapseDialog>
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.45),
-                          fontSize: 13,
+                          fontSize: 14,        // was 13
                           height: 1.6,
                         ),
                       ),
@@ -148,19 +138,18 @@ class _RelapseDialogState extends State<_RelapseDialog>
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.03),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.06), width: 1),
+                      border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
                     ),
                     child: Row(
                       children: [
-                        const Text('💪', style: TextStyle(fontSize: 18)),
+                        const Text('💪', style: TextStyle(fontSize: 20)), // was 18
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'Every setback is the start of a stronger comeback. Honesty is your first step forward.',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
+                              fontSize: 13,        // was 12
                               height: 1.5,
                             ),
                           ),
@@ -175,18 +164,16 @@ class _RelapseDialogState extends State<_RelapseDialog>
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   child: Column(
                     children: [
-                      // Yes, I Relapsed
                       SizedBox(
                         width: double.infinity,
-                        height: 50,
+                        height: 54, // was 50
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(14),
                             color: const Color(0xFFE53935),
                             boxShadow: [
                               BoxShadow(
-                                color:
-                                    const Color(0xFFE53935).withOpacity(0.3),
+                                color: const Color(0xFFE53935).withOpacity(0.3),
                                 blurRadius: 14,
                                 offset: const Offset(0, 5),
                               ),
@@ -205,18 +192,16 @@ class _RelapseDialogState extends State<_RelapseDialog>
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700,
-                                fontSize: 14,
+                                fontSize: 15,        // was 14
                               ),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 10),
-
-                      // Cancel
                       SizedBox(
                         width: double.infinity,
-                        height: 50,
+                        height: 54, // was 50
                         child: ElevatedButton(
                           onPressed: () => Navigator.pop(context, false),
                           style: ElevatedButton.styleFrom(
@@ -230,7 +215,7 @@ class _RelapseDialogState extends State<_RelapseDialog>
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.6),
                               fontWeight: FontWeight.w600,
-                              fontSize: 14,
+                              fontSize: 15,        // was 14
                             ),
                           ),
                         ),

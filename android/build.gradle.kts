@@ -18,9 +18,10 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
-subprojects {
-    project.evaluationDependsOn(":app")
-}
+// ❌ REMOVE THIS BLOCK COMPLETELY
+// subprojects {
+//     project.evaluationDependsOn(":app")
+// }
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)

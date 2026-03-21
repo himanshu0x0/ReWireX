@@ -44,8 +44,9 @@ class HabitLoopService {
     // If the peak hour holds >50% of total weight → very concentrated loop
     final ratio = totalScore == 0 ? 0.0 : peakScore / totalScore;
     final String severity;
-    if (ratio >= 0.45)       severity = 'High';
-    else if (ratio >= 0.28)  severity = 'Moderate';
+    if (ratio >= 0.45) {
+      severity = 'High';
+    } else if (ratio >= 0.28)  severity = 'Moderate';
     else                     severity = 'Low';
 
     final trigger = _triggerLabel(peakHour);

@@ -3,6 +3,8 @@
 /// 📚 Master data library for the urge logging system.
 /// All lists are clinically informed and cover the full range of
 /// addictive / compulsive behavior patterns seen internationally.
+library;
+
 
 // ─────────────────────────────────────────────────────────────
 //  URGE TYPE
