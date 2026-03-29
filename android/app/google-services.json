@@ -12,7 +12,20 @@
           "package_name": "com.example.rewirex"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1054000063885-c7gndgp91fm7a1ofe0h2olp49qonas30.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.rewirex",
+            "certificate_hash": "8d391b0b7d158f0e875777d5de04172776876d04"
+          }
+        },
+        {
+          "client_id": "1054000063885-j4sl4v4bfq5dj7bntj4sesnn0e41jb2d.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCoj7TfgpRKeCip8_GWcknFNCJHTAT9yTw"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1054000063885-j4sl4v4bfq5dj7bntj4sesnn0e41jb2d.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1054000063885-lcfkgkbf0gb653sldkgtlu24388n7q4u.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rewirex"
+              }
+            }
+          ]
         }
       }
     }

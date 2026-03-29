@@ -1,1179 +1,1013 @@
-// lib/features/intervention/screens/coping_tools_screen.dart
-//
-// 🛡️ Coping Tools Screen
-//
-// This screen opens when the user taps "Open Coping Tools" from the
-// Pre-Relapse Warning card. It is NOT the generic Emergency Reset —
-// it is a rich, personalised, science-backed toolkit that responds
-// directly to the user's current warning severity, dominant emotion,
-// and active risk signals.
-//
-// SECTIONS:
-//   1. Situation header  — severity, risk score, personalised message
-//   2. Breathing timer   — interactive 4-7-8 exercise with animation
-//   3. Grounding tools   — cards specific to the user's emotion
-//   4. Urge surfing      — guided wave visualisation
-//   5. Quick wins        — immediate small actions
-//   6. Log urge CTA      — routes to UrgeLogScreen
+// ============================================================
+// PATH: lib/features/intervention/screens/coping_tools_screen.dart
+// ============================================================
 
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:rewirex/features/ai/models/pre_relapse_warning_model.dart';
-import 'package:rewirex/features/urge/screens/urge_log_screen.dart';
+import 'package:rewirex/features/connect/connect_screen.dart';
+import 'package:rewirex/features/connect/games/screens/games_hub_screen.dart';
+import 'package:rewirex/features/connect/wellness/screens/wellness_hub_screen.dart';
 
 class CopingToolsScreen extends StatefulWidget {
   final PreRelapseWarningModel warning;
-
   const CopingToolsScreen({super.key, required this.warning});
-
   @override
-  State<CopingToolsScreen> createState() => _CopingToolsScreenState();
+  State<CopingToolsScreen> createState() => _State();
 }
 
-class _CopingToolsScreenState extends State<CopingToolsScreen>
-    with TickerProviderStateMixin {
+class _State extends State<CopingToolsScreen> with TickerProviderStateMixin {
+  late TabController _tab;
 
-  // ── Animations ─────────────────────────────────────────────────
-  late AnimationController _fadeController;
-  late Animation<double>   _fadeAnim;
-
-  // Breathing exercise
-  late AnimationController _breathController;
-  late Animation<double>   _breathAnim;
-  bool   _breathingActive  = false;
-  int    _breathPhase      = 0; // 0=inhale 1=hold 2=exhale
-  int    _breathCycle      = 0;
-  int    _breathSeconds    = 0;
+  // Breathing state
+  int _breathPhase = 0;
+  int _breathSecs = 4;
+  int _breathCycles = 0;
+  bool _breathActive = false;
   Timer? _breathTimer;
+  late AnimationController _breathCtrl;
+  late Animation<double> _breathAnim;
 
-  // Urge wave
-  late AnimationController _waveController;
-  late Animation<double>   _waveAnim;
+  // Surf state
+  int _surfStep = 0;
 
-  // Selected tool tab
-  int _selectedTool = 0;
+  // Steps panel
+  bool _stepsExpanded = false;
 
   @override
   void initState() {
     super.initState();
-
-    _fadeController = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 600))
-      ..forward();
-    _fadeAnim = CurvedAnimation(
-        parent: _fadeController, curve: Curves.easeOut);
-
-    _breathController = AnimationController(
+    _tab = TabController(length: 3, vsync: this);
+    _breathCtrl = AnimationController(
         vsync: this, duration: const Duration(seconds: 4));
     _breathAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
-        CurvedAnimation(parent: _breathController, curve: Curves.easeInOut));
-
-    _waveController = AnimationController(
-        vsync: this, duration: const Duration(seconds: 3))
-      ..repeat(reverse: true);
-    _waveAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _waveController, curve: Curves.easeInOut));
+        CurvedAnimation(parent: _breathCtrl, curve: Curves.easeInOut));
   }
 
   @override
   void dispose() {
-    _fadeController.dispose();
-    _breathController.dispose();
-    _waveController.dispose();
+    _tab.dispose();
     _breathTimer?.cancel();
+    _breathCtrl.dispose();
     super.dispose();
   }
 
-  // ── Severity colour ────────────────────────────────────────────
-  Color get _severityColor {
-    switch (widget.warning.severity) {
-      case 'Critical': return const Color(0xFFEF5350);
-      case 'High':     return Colors.orange;
-      default:         return Colors.amber;
-    }
-  }
+  // ── Breathing helpers ──────────────────────────────────────────
+  static const _bLabels = ['Inhale', 'Hold', 'Exhale'];
+  static const _bDurations = [4, 7, 8];
+  static const _bColors = [
+    Color(0xFF6C63FF),
+    Color(0xFF00C4A0),
+    Color(0xFF4FC3F7),
+  ];
 
-  IconData get _severityIcon {
-    switch (widget.warning.severity) {
-      case 'Critical': return Icons.crisis_alert_rounded;
-      case 'High':     return Icons.warning_amber_rounded;
-      default:         return Icons.radar_rounded;
-    }
-  }
-
-  // ── Breathing exercise logic ───────────────────────────────────
   void _startBreathing() {
     setState(() {
-      _breathingActive = true;
-      _breathPhase     = 0;
-      _breathCycle     = 0;
-      _breathSeconds   = 4;
+      _breathActive = true;
+      _breathPhase = 0;
+      _breathSecs = 4;
+      _breathCycles = 0;
     });
-    _breathController.forward(from: 0);
-    _breathTimer = Timer.periodic(const Duration(seconds: 1), _breathTick);
-    HapticFeedback.mediumImpact();
+    _breathCtrl.forward(from: 0);
+    _breathTimer?.cancel();
+    _breathTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _breathSecs--);
+      if (_breathSecs <= 0) {
+        _breathPhase = (_breathPhase + 1) % 3;
+        _breathSecs = _bDurations[_breathPhase];
+        if (_breathPhase == 0) {
+          _breathCycles++;
+          if (_breathCycles >= 3) {
+            _breathTimer?.cancel();
+            setState(() => _breathActive = false);
+            _showCompletion();
+            return;
+          }
+          _breathCtrl.forward(from: 0);
+        } else if (_breathPhase == 2) {
+          _breathCtrl.reverse(from: 1);
+        } else {
+          _breathCtrl.stop();
+        }
+      }
+    });
   }
 
   void _stopBreathing() {
     _breathTimer?.cancel();
-    _breathController.stop();
-    setState(() => _breathingActive = false);
+    setState(() => _breathActive = false);
   }
 
-  void _breathTick(Timer t) {
-    if (!mounted) { t.cancel(); return; }
-    setState(() => _breathSeconds--);
+  // ── Session-complete dialog ────────────────────────────────────
+  // For Lonely / Sad / Depressed users, surfaces Truth & Dare and
+  // Connect Hub so they are never left alone after the exercise.
+  void _showCompletion() {
+    final emotion = widget.warning.dominantEmotion;
+    final needsConnection =
+        emotion == 'Lonely' || emotion == 'Sad' || emotion == 'Depressed';
 
-    if (_breathSeconds <= 0) {
-      _breathPhase = (_breathPhase + 1) % 3;
-      switch (_breathPhase) {
-        case 0: // inhale 4s
-          _breathSeconds = 4;
-          _breathController.forward(from: 0);
-          break;
-        case 1: // hold 7s
-          _breathSeconds = 7;
-          _breathController.stop();
-          break;
-        case 2: // exhale 8s
-          _breathSeconds = 8;
-          _breathController.reverse(from: 1);
-          break;
-      }
-      if (_breathPhase == 0) {
-        _breathCycle++;
-        HapticFeedback.lightImpact();
-        if (_breathCycle >= 3) {
-          _stopBreathing();
-          _showBreathingComplete();
-        }
-      }
-    }
-  }
-
-  void _showBreathingComplete() {
     showDialog(
       context: context,
-      barrierColor: Colors.black54,
+      barrierDismissible: false,
       builder: (_) => Dialog(
         backgroundColor: Colors.transparent,
         child: Container(
-          padding: const EdgeInsets.all(28),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF161625),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-                color: const Color(0xFF00C4A0).withOpacity(0.3), width: 1),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('✅', style: TextStyle(fontSize: 48)),
-              const SizedBox(height: 16),
-              const Text('3 Cycles Complete',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800)),
-              const SizedBox(height: 10),
-              Text(
-                'Your nervous system has been activated. '
-                'The urge intensity should feel 20–40% lower now.',
+              color: const Color(0xFF141428),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                  color: const Color(0xFF00C4A0).withOpacity(0.3))),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // ── Trophy ────────────────────────────────────────
+            const Text('🎉', style: TextStyle(fontSize: 52)),
+            const SizedBox(height: 12),
+            const Text('3 Cycles Complete!',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text(
+                'Your nervous system is calmer.\nCraving intensity has reduced.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withOpacity(0.55),
                     fontSize: 14,
-                    height: 1.5),
+                    height: 1.5)),
+
+            const SizedBox(height: 20),
+
+            // ── Connection banner (lonely / sad / depressed) ──
+            if (needsConnection) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                    color: const Color(0xFF6C63FF).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: const Color(0xFF6C63FF).withOpacity(0.25))),
+                child: Row(children: [
+                  const Text('💬', style: TextStyle(fontSize: 22)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Breathing helps — but connection heals. '
+                      'Talk to real warriors right now.',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                          height: 1.5),
+                    ),
+                  ),
+                ]),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+
+              // Truth & Dare
               SizedBox(
                 width: double.infinity,
                 height: 48,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: const LinearGradient(
+                        colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)]),
+                    boxShadow: [
+                      BoxShadow(
+                          color: const Color(0xFFFF6B6B).withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context); // close dialog
+                      Navigator.pop(context); // close coping screen
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const GamesHubScreen()));
+                    },
+                    icon: const Text('🎮', style: TextStyle(fontSize: 18)),
+                    label: const Text('Play Truth & Dare',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14)),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14))),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Connect Hub
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: const LinearGradient(
+                        colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)]),
+                    boxShadow: [
+                      BoxShadow(
+                          color: const Color(0xFF6C63FF).withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.pop(context);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ConnectScreen()));
+                    },
+                    icon: const Text('👥', style: TextStyle(fontSize: 18)),
+                    label: const Text('Connect with Warriors',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14)),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14))),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // ── Wellness shortcut (always shown) ──────────────
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const WellnessHubScreen()));
+                },
+                icon: const Text('🧘', style: TextStyle(fontSize: 16)),
+                label: Text('More Wellness Tools',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                        color: Colors.white.withOpacity(0.15)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14))),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // ── I feel better ─────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00C4A0),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: const Text('I Feel Better',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  //  BUILD
-  // ─────────────────────────────────────────────────────────────
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
-      body: FadeTransition(
-        opacity: _fadeAnim,
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSituationCard(),
-                      const SizedBox(height: 20),
-                      _buildToolTabs(),
-                      const SizedBox(height: 16),
-                      _buildSelectedTool(),
-                      const SizedBox(height: 20),
-                      _buildInterventionSteps(),
-                      const SizedBox(height: 20),
-                      _buildQuickWins(),
-                      const SizedBox(height: 20),
-                      _buildLogUrgeButton(),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Header ─────────────────────────────────────────────────────
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.07),
-                  borderRadius: BorderRadius.circular(12)),
-              child: Icon(Icons.arrow_back_ios_new_rounded,
-                  size: 16, color: Colors.white.withOpacity(0.7)),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Coping Tools',
+                        borderRadius: BorderRadius.circular(14))),
+                child: const Text('I feel better ✓',
                     style: TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800)),
-                Text('Personalised for right now',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.4),
-                        fontSize: 13)),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: _severityColor.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                  color: _severityColor.withOpacity(0.3), width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(_severityIcon, color: _severityColor, size: 13),
-                const SizedBox(width: 4),
-                Text(widget.warning.severity,
-                    style: TextStyle(
-                        color: _severityColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Situation card ─────────────────────────────────────────────
-  Widget _buildSituationCard() {
-    final w = widget.warning;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: _severityColor.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-            color: _severityColor.withOpacity(0.25), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Risk score bar
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Current Risk Score',
-                  style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 13)),
-              Text('${w.riskScore.toStringAsFixed(0)}/100',
-                  style: TextStyle(
-                      color: _severityColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: w.riskScore / 100),
-              duration: const Duration(milliseconds: 1200),
-              curve: Curves.easeOutCubic,
-              builder: (_, val, __) => LinearProgressIndicator(
-                value: val,
-                minHeight: 7,
-                backgroundColor: Colors.white.withOpacity(0.07),
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(_severityColor),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14)),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          // Emotion + trigger context
-          if (w.dominantEmotion.isNotEmpty || w.primaryTrigger.isNotEmpty)
-            Row(
-              children: [
-                if (w.dominantEmotion.isNotEmpty)
-                  _ContextChip(
-                      label: '😔 ${w.dominantEmotion}',
-                      color: Colors.purple),
-                if (w.dominantEmotion.isNotEmpty &&
-                    w.primaryTrigger.isNotEmpty)
-                  const SizedBox(width: 8),
-                if (w.primaryTrigger.isNotEmpty)
-                  _ContextChip(
-                      label: '⚡ ${w.primaryTrigger}',
-                      color: Colors.orange),
-              ],
-            ),
-          if (w.dominantEmotion.isNotEmpty || w.primaryTrigger.isNotEmpty)
-            const SizedBox(height: 12),
-          Text(
-            w.message,
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 14,
-                height: 1.5),
-          ),
-        ],
+          ]),
+        ),
       ),
     );
   }
 
-  // ── Tool tabs ──────────────────────────────────────────────────
-  Widget _buildToolTabs() {
-    final tabs = ['🌬️ Breathe', '🌊 Surf', '⚡ Ground'];
-    return Row(
-      children: tabs.asMap().entries.map((e) {
-        final isSelected = _selectedTool == e.key;
-        return Expanded(
-          child: GestureDetector(
-            onTap: () {
-              HapticFeedback.selectionClick();
-              setState(() => _selectedTool = e.key);
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: EdgeInsets.only(right: e.key < 2 ? 8 : 0),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF6C63FF).withOpacity(0.2)
-                    : Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFF6C63FF).withOpacity(0.5)
-                      : Colors.white.withOpacity(0.08),
-                  width: 1.3,
-                ),
-              ),
-              child: Text(e.value,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: isSelected
-                          ? const Color(0xFF6C63FF)
-                          : Colors.white.withOpacity(0.5),
-                      fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500)),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  // ── Selected tool panel ────────────────────────────────────────
-  Widget _buildSelectedTool() {
-    switch (_selectedTool) {
-      case 0:
-        return _buildBreathingTool();
-      case 1:
-        return _buildUrgeSurfingTool();
+  // ── Severity color ─────────────────────────────────────────────
+  Color get _sevColor {
+    switch (widget.warning.severity) {
+      case 'Critical':
+        return Colors.red;
+      case 'High':
+        return Colors.orange;
       default:
-        return _buildGroundingTool();
+        return Colors.amber;
     }
   }
 
-  // ── 4-7-8 Breathing tool ───────────────────────────────────────
-  Widget _buildBreathingTool() {
-    final phaseLabels  = ['Inhale', 'Hold', 'Exhale'];
-    final phaseColors  = [
-      const Color(0xFF6C63FF),
-      const Color(0xFF00C4A0),
-      Colors.blue,
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF141428),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-            color: const Color(0xFF6C63FF).withOpacity(0.2), width: 1),
-      ),
-      child: Column(
-        children: [
-          const Text('4 · 7 · 8 Breathing',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text(
-            'Activates parasympathetic nervous system.\nReduces craving intensity in 90 seconds.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.45),
-                fontSize: 13,
-                height: 1.5),
-          ),
-          const SizedBox(height: 28),
-
-          // Animated circle
-          GestureDetector(
-            onTap: _breathingActive ? _stopBreathing : _startBreathing,
-            child: AnimatedBuilder(
-              animation: _breathAnim,
-              builder: (_, __) {
-                final scale    = _breathingActive ? _breathAnim.value : 0.75;
-                final color    = _breathingActive
-                    ? phaseColors[_breathPhase]
-                    : const Color(0xFF6C63FF);
-                final label    = _breathingActive
-                    ? phaseLabels[_breathPhase]
-                    : 'TAP\nTO START';
-                final seconds  = _breathingActive
-                    ? _breathSeconds.toString()
-                    : '';
-
-                return Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Glow ring
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width:  160 * scale + 20,
-                      height: 160 * scale + 20,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color.withOpacity(0.08),
-                      ),
-                    ),
-                    // Main circle
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width:  160 * scale,
-                      height: 160 * scale,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: color.withOpacity(0.12),
-                        border: Border.all(
-                            color: color.withOpacity(0.5),
-                            width: 2.5),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(label,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: color,
-                                  fontSize: _breathingActive ? 18 : 15,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1.3)),
-                          if (seconds.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(seconds,
-                                style: TextStyle(
-                                    color: color.withOpacity(0.7),
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.w900)),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Cycle counter
-          if (_breathingActive) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (i) => Container(
-                width: 10, height: 10,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: i < _breathCycle
-                      ? const Color(0xFF00C4A0)
-                      : Colors.white.withOpacity(0.15),
-                ),
-              )),
-            ),
-            const SizedBox(height: 12),
-            Text('Cycle ${_breathCycle + 1} of 3',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: 13)),
-          ] else ...[
-            // Phase guide
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _PhaseChip(label: 'Inhale', seconds: 4, color: phaseColors[0]),
-                _PhaseChip(label: 'Hold',   seconds: 7, color: phaseColors[1]),
-                _PhaseChip(label: 'Exhale', seconds: 8, color: phaseColors[2]),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // ── Urge surfing tool ──────────────────────────────────────────
-  Widget _buildUrgeSurfingTool() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF141428),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-            color: Colors.blue.withOpacity(0.2), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Urge Surfing',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text(
-            'Urges are waves — they rise, peak, and fall in 15–20 minutes. '
-            'You don\'t fight the wave. You ride it.',
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
-                fontSize: 13,
-                height: 1.5),
-          ),
-          const SizedBox(height: 24),
-
-          // Wave animation
-          AnimatedBuilder(
-            animation: _waveAnim,
-            builder: (_, __) {
-              return SizedBox(
-                height: 100,
-                child: CustomPaint(
-                  painter: _WavePainter(
-                    progress: _waveAnim.value,
-                    color: Colors.blue,
-                  ),
-                  size: const Size(double.infinity, 100),
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 24),
-
-          // 4-step guide
-          ..._urgeSurfingSteps.asMap().entries.map((e) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 28, height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: Colors.blue.withOpacity(0.3), width: 1),
-                  ),
-                  child: Center(
-                    child: Text('${e.key + 1}',
-                        style: const TextStyle(
-                            color: Colors.blue,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(e.value['title']!,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 2),
-                      Text(e.value['body']!,
-                          style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
-                              height: 1.4)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          )),
-        ],
-      ),
-    );
-  }
-
-  static const _urgeSurfingSteps = [
-    {
-      'title': 'Notice the urge',
-      'body':  'Acknowledge it without judgement. "I notice I am having an urge." Name it.',
-    },
-    {
-      'title': 'Observe where you feel it',
-      'body':  'Where is it in your body? Chest? Throat? Stomach? Just observe — don\'t react.',
-    },
-    {
-      'title': 'Watch it rise',
-      'body':  'Like a wave, it will intensify for a few minutes. Stay with it. Don\'t run.',
-    },
-    {
-      'title': 'Watch it pass',
-      'body':  'Every urge peaks and falls within 15–20 min. You have outlasted every one so far.',
-    },
-  ];
-
-  // ── Grounding tool ─────────────────────────────────────────────
-  Widget _buildGroundingTool() {
-    final emotion = widget.warning.dominantEmotion;
-
-    final tool = _groundingForEmotion(emotion);
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF141428),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-            color: const Color(0xFF00C4A0).withOpacity(0.2), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(tool['emoji']!,
-                  style: const TextStyle(fontSize: 24)),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(tool['title']!,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800)),
-                  Text('For ${emotion.isNotEmpty ? emotion.toLowerCase() : "right now"}',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
-                          fontSize: 12)),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(tool['science']!,
-              style: TextStyle(
-                  color: const Color(0xFF00C4A0).withOpacity(0.8),
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  height: 1.4)),
-          const SizedBox(height: 16),
-          ...( tool['steps'] as List<String>).asMap().entries.map((e) =>
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 26, height: 26,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00C4A0).withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text('${e.key + 1}',
-                          style: const TextStyle(
-                              color: Color(0xFF00C4A0),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(e.value,
-                        style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 14,
-                            height: 1.5)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Map<String, dynamic> _groundingForEmotion(String emotion) {
-    if (emotion == 'Anxious' || emotion == 'Stressed') {
+  // ── Emotion-personalised grounding ────────────────────────────
+  Map<String, dynamic> get _groundData {
+    final e = widget.warning.dominantEmotion;
+    if (e == 'Anxious' || e == 'Stressed')
       return {
-        'emoji': '🧊',
+        'icon': '🧊',
         'title': 'Cold Grounding',
-        'science': 'Cold stimulation activates the dive reflex — heart rate drops '
-            'within seconds, directly countering the anxiety response.',
         'steps': [
-          'Fill a bowl with cold water or grab ice cubes.',
-          'Submerge your hands or splash cold water on your face for 15 seconds.',
-          'Focus entirely on the physical sensation — temperature, pressure, texture.',
-          'Notice your heart rate slowing. Your nervous system is resetting.',
-          'Repeat once more if needed.',
-        ],
+          'Hold an ice cube or cold object in your hand.',
+          'Focus entirely on the sensation for 30 seconds.',
+          'Notice how the sensation overrides the craving signal.',
+          'Repeat until the urge wave passes.',
+        ]
       };
-    }
-    if (emotion == 'Lonely') {
+    if (e == 'Lonely')
       return {
-        'emoji': '📲',
-        'title': '2-Minute Connection',
-        'science': 'Social connection activates oxytocin release which directly '
-            'counteracts the loneliness signal that triggers urges.',
+        'icon': '📲',
+        'title': '2-Min Connection',
         'steps': [
-          'Open your contacts right now.',
-          'Text or call one person — a friend, family member, or anyone safe.',
-          'You don\'t need to explain your situation. Just connect.',
-          'Even a 2-minute conversation is enough to shift your neurochemistry.',
-          'After the call, notice how the urge has changed.',
-        ],
+          'Open your messages right now.',
+          'Send a "thinking of you" text to one person.',
+          'You don\'t need to explain yourself.',
+          'Connection is the opposite of craving.',
+        ]
       };
-    }
-    if (emotion == 'Bored') {
+    if (e == 'Bored')
       return {
-        'emoji': '🚶',
+        'icon': '🚶',
         'title': 'Environment Change',
-        'science': 'Boredom urges are environment-specific. Breaking your physical '
-            'context interrupts the cue-routine neural pathway immediately.',
         'steps': [
-          'Stand up right now — don\'t think about it, just do it.',
-          'Leave the room you are in.',
-          'Go outside if possible, even for 5 minutes.',
-          'If outside isn\'t possible, move to a different room entirely.',
-          'Do one physical movement — 10 jumping jacks, a short walk, anything.',
-        ],
+          'Stand up from wherever you are right now.',
+          'Walk to a different room or go outside.',
+          'Boredom urges are location-specific.',
+          'Breaking the context breaks the pattern.',
+        ]
       };
-    }
-    if (emotion == 'Angry' || emotion == 'Frustrated') {
+    if (e == 'Angry' || e == 'Frustrated')
       return {
-        'emoji': '💪',
+        'icon': '💪',
         'title': 'Physical Release',
-        'science': 'Anger generates cortisol. Physical exertion metabolises it and '
-            'produces endorphins that counteract the urge signal.',
         'steps': [
-          'Do 20 push-ups or 20 jump squats right now.',
-          'If that\'s too much, do 30 seconds of intense movement — anything.',
-          'Breathe hard. Let your body burn the cortisol.',
-          'After movement, take 3 slow deep breaths.',
-          'Notice the anger has shifted. Physical action is faster than thinking.',
-        ],
+          'Do 20 push-ups or jumping jacks right now.',
+          'Anger creates cortisol — movement burns it.',
+          'Sprint for 30 seconds if you can.',
+          'Endorphins will counteract the urge signal.',
+        ]
       };
-    }
-    if (emotion == 'Sad' || emotion == 'Depressed') {
+    if (e == 'Sad' || e == 'Depressed')
       return {
-        'emoji': '✍️',
+        'icon': '🙏',
         'title': 'Gratitude Activation',
-        'science': 'Writing activates the prefrontal cortex, creating neural '
-            'activity that competes directly with the craving response.',
         'steps': [
-          'Get something to write on — phone notes is fine.',
-          'Write 3 specific things you are grateful for right now.',
-          'They can be tiny. "The sun came out today." That counts.',
-          'For each one, write one sentence about WHY you are grateful for it.',
-          'Read what you wrote aloud. This reinforces the neural shift.',
-        ],
+          'Write down 3 things you are grateful for.',
+          'They can be as small as "I woke up today".',
+          'This activates the prefrontal cortex.',
+          'Competing neural activity reduces the craving pull.',
+        ]
       };
-    }
-    // Default
     return {
-      'emoji': '🎯',
+      'icon': '🎯',
       'title': '5-4-3-2-1 Grounding',
-      'science': 'Sensory grounding redirects attention from internal cravings '
-          'to external reality, reducing urge intensity by up to 30%.',
       'steps': [
-        'Name 5 things you can SEE right now.',
-        'Name 4 things you can physically TOUCH.',
-        'Name 3 things you can HEAR right now.',
-        'Name 2 things you can SMELL.',
-        'Name 1 thing you can TASTE. Take a slow breath. You are here.',
-      ],
+        'Name 5 things you can see right now.',
+        'Name 4 things you can touch — touch them.',
+        'Name 3 things you can hear in this moment.',
+        'Name 2 things you can smell. Take 1 deep breath.',
+      ]
     };
   }
 
-  // ── Personalised intervention steps ───────────────────────────
-  Widget _buildInterventionSteps() {
-    if (widget.warning.interventionSteps.isEmpty) return const SizedBox.shrink();
+  // ── Surf steps ─────────────────────────────────────────────────
+  static const _surfSteps = [
+    {
+      'icon': '🌊',
+      'title': 'Notice the Wave',
+      'desc': 'The urge is a wave — it will peak and fall. '
+          'You don\'t have to fight it. Just notice it.',
+    },
+    {
+      'icon': '🏄',
+      'title': 'Ride, Don\'t Resist',
+      'desc': 'Resistance amplifies the craving. '
+          'Instead, observe it with curiosity: "Where do I feel this in my body?"',
+    },
+    {
+      'icon': '⏱',
+      'title': 'Wait 20 Minutes',
+      'desc': 'Peak urge intensity lasts 15–20 minutes max. '
+          'After that, neurological pressure drops significantly.',
+    },
+    {
+      'icon': '✅',
+      'title': 'Celebrate the Resist',
+      'desc': 'Every time you surf a wave without acting, '
+          'the neural pathway for the habit weakens. '
+          'This is literally rewiring your brain.',
+    },
+  ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('YOUR PERSONALISED PLAN',
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.35),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2.5)),
-        const SizedBox(height: 12),
-        ...widget.warning.interventionSteps.asMap().entries.map((entry) {
-          final step = entry.value;
-          final idx  = entry.key + 1;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF141428),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                  color: Colors.white.withOpacity(0.07), width: 1),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(children: [
-                  Text(step.emoji,
-                      style: const TextStyle(fontSize: 22)),
-                  const SizedBox(height: 2),
-                  Text('$idx',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.25),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700)),
+  @override
+  Widget build(BuildContext context) {
+    final w = widget.warning;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D1A),
+      appBar: AppBar(
+          backgroundColor: const Color(0xFF0D0D1A),
+          elevation: 0,
+          leading: IconButton(
+              icon: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(10)),
+                  child: Icon(Icons.arrow_back_ios_new_rounded,
+                      size: 15, color: Colors.white.withOpacity(0.7))),
+              onPressed: () => Navigator.pop(context)),
+          title: ShaderMask(
+              shaderCallback: (b) => const LinearGradient(
+                      colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)])
+                  .createShader(b),
+              child: const Text('Coping Tools',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800)))),
+      body: Column(children: [
+        _situationHeader(w),
+        Container(
+            color: const Color(0xFF0D0D1A),
+            child: TabBar(
+                controller: _tab,
+                indicatorColor: const Color(0xFF6C63FF),
+                indicatorWeight: 2.5,
+                labelColor: const Color(0xFF6C63FF),
+                unselectedLabelColor: Colors.white.withOpacity(0.35),
+                labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 13),
+                tabs: const [
+                  Tab(
+                      icon: Icon(Icons.air_rounded, size: 18),
+                      text: 'Breathe'),
+                  Tab(
+                      icon: Icon(Icons.waves_rounded, size: 18),
+                      text: 'Surf'),
+                  Tab(
+                      icon: Icon(Icons.bolt_rounded, size: 18),
+                      text: 'Ground'),
+                ])),
+        Expanded(
+            child: TabBarView(controller: _tab, children: [
+          _buildBreathe(),
+          _buildSurf(),
+          _buildGround(),
+        ])),
+        if (w.interventionSteps.isNotEmpty) _stepsPanel(w),
+        _logUrgeBtn(),
+      ]),
+    );
+  }
+
+  // ── Situation header ───────────────────────────────────────────
+  Widget _situationHeader(PreRelapseWarningModel w) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: _sevColor.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: _sevColor.withOpacity(0.2))),
+        child: Row(children: [
+          Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                  color: _sevColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(9)),
+              child: Icon(
+                  w.severity == 'Critical'
+                      ? Icons.crisis_alert_rounded
+                      : Icons.warning_amber_rounded,
+                  color: _sevColor,
+                  size: 16)),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(
+                    '${w.severity} Risk · ${w.dominantEmotion.isNotEmpty ? w.dominantEmotion : "Act Now"}',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                        value: (w.riskScore / 100).clamp(0.0, 1.0),
+                        minHeight: 5,
+                        backgroundColor: Colors.white.withOpacity(0.07),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(_sevColor))),
+              ])),
+          const SizedBox(width: 8),
+          Text('${w.riskScore.toStringAsFixed(0)}',
+              style: TextStyle(
+                  color: _sevColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800)),
+        ]),
+      );
+
+  // ── Breathe Tab ────────────────────────────────────────────────
+  Widget _buildBreathe() => SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(children: [
+          const Text('4 – 7 – 8 Breathing',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(
+              'Activates your parasympathetic nervous system in 90 seconds.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.45), fontSize: 13)),
+          const SizedBox(height: 24),
+          AnimatedBuilder(
+              animation: _breathAnim,
+              builder: (_, __) {
+                final color = _breathActive
+                    ? _bColors[_breathPhase]
+                    : const Color(0xFF6C63FF);
+                final scale = _breathActive ? _breathAnim.value : 0.75;
+                return GestureDetector(
+                  onTap: _breathActive ? null : _startBreathing,
+                  child: Stack(alignment: Alignment.center, children: [
+                    AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: 170 * scale + 20,
+                        height: 170 * scale + 20,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: color.withOpacity(0.07))),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: 150 * scale,
+                      height: 150 * scale,
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: color.withOpacity(0.12),
+                          border: Border.all(
+                              color: color.withOpacity(0.5), width: 2.5)),
+                      child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                                _breathActive
+                                    ? _bLabels[_breathPhase]
+                                    : 'TAP\nTO START',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: color,
+                                    fontSize: _breathActive ? 16 : 13,
+                                    fontWeight: FontWeight.w800)),
+                            if (_breathActive) ...[
+                              const SizedBox(height: 4),
+                              Text('$_breathSecs',
+                                  style: TextStyle(
+                                      color: color.withOpacity(0.7),
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.w900)),
+                            ],
+                          ]),
+                    ),
+                  ]),
+                );
+              }),
+          const SizedBox(height: 20),
+          Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                  3,
+                  (i) => Container(
+                        width: 12,
+                        height: 12,
+                        margin:
+                            const EdgeInsets.symmetric(horizontal: 5),
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i < _breathCycles
+                                ? const Color(0xFF00C4A0)
+                                : Colors.white.withOpacity(0.15)),
+                      ))),
+          const SizedBox(height: 8),
+          Text(
+              '${3 - _breathCycles} cycle${3 - _breathCycles == 1 ? '' : 's'} remaining',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.35), fontSize: 12)),
+          if (_breathActive) ...[
+            const SizedBox(height: 16),
+            TextButton(
+                onPressed: _stopBreathing,
+                child: Text('Stop',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.4),
+                        fontSize: 13))),
+          ],
+        ]),
+      );
+
+  // ── Surf Tab ───────────────────────────────────────────────────
+  Widget _buildSurf() => SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(children: [
+          const Text('Urge Surfing',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('Ride the wave without fighting. It will pass.',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.45), fontSize: 13)),
+          const SizedBox(height: 20),
+          _WaveWidget(color: const Color(0xFF6C63FF)),
+          const SizedBox(height: 20),
+          ...List.generate(_surfSteps.length, (i) {
+            final s = _surfSteps[i];
+            final done = i < _surfStep;
+            return GestureDetector(
+              onTap: () => setState(() => _surfStep = i + 1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                    color: done
+                        ? const Color(0xFF00C4A0).withOpacity(0.07)
+                        : _surfStep == i
+                            ? const Color(0xFF6C63FF).withOpacity(0.08)
+                            : Colors.white.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: done
+                            ? const Color(0xFF00C4A0).withOpacity(0.25)
+                            : _surfStep == i
+                                ? const Color(0xFF6C63FF)
+                                    .withOpacity(0.25)
+                                : Colors.white.withOpacity(0.06))),
+                child: Row(children: [
+                  Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: done
+                              ? const Color(0xFF00C4A0).withOpacity(0.15)
+                              : Colors.white.withOpacity(0.05)),
+                      child: Center(
+                          child: Text(
+                              done ? '✅' : s['icon'] as String,
+                              style: const TextStyle(fontSize: 18)))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        Text(s['title'] as String,
+                            style: TextStyle(
+                                color: done
+                                    ? const Color(0xFF00C4A0)
+                                    : Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 4),
+                        Text(s['desc'] as String,
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.5),
+                                fontSize: 12,
+                                height: 1.4)),
+                      ])),
                 ]),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(step.title,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 5),
-                      Text(step.description,
+              ),
+            );
+          }),
+          if (_surfStep >= _surfSteps.length) ...[
+            const SizedBox(height: 16),
+            Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: const Color(0xFF00C4A0).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color:
+                            const Color(0xFF00C4A0).withOpacity(0.25))),
+                child: const Row(children: [
+                  Text('🏆', style: TextStyle(fontSize: 28)),
+                  SizedBox(width: 12),
+                  Expanded(
+                      child: Text(
+                          'You surfed the urge! Your brain just got stronger.',
                           style: TextStyle(
-                              color: Colors.white.withOpacity(0.55),
-                              fontSize: 13,
-                              height: 1.5)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
+                              color: Color(0xFF00C4A0),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600))),
+                ])),
+          ],
+        ]),
+      );
 
-  // ── Quick wins ─────────────────────────────────────────────────
-  Widget _buildQuickWins() {
-    final wins = [
-      {'emoji': '💧', 'text': 'Drink a full glass of water right now'},
-      {'emoji': '📱', 'text': 'Put your phone face-down for 5 minutes'},
-      {'emoji': '🚪', 'text': 'Open a window or step outside'},
-      {'emoji': '🎵', 'text': 'Play your strongest song at full volume'},
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('INSTANT WINS',
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.35),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2.5)),
-        const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 2.4,
-          children: wins.map((w) => Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 10),
+  // ── Ground Tab ─────────────────────────────────────────────────
+  Widget _buildGround() {
+    final gd = _groundData;
+    final steps = gd['steps'] as List<String>;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child:
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text(gd['icon'] as String,
+              style: const TextStyle(fontSize: 32)),
+          const SizedBox(width: 12),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(gd['title'] as String,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800)),
+            Text(
+                'Personalised for ${widget.warning.dominantEmotion.isNotEmpty ? widget.warning.dominantEmotion : "you"}',
+                style: TextStyle(
+                    color: const Color(0xFF6C63FF).withOpacity(0.8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ]),
+        ]),
+        const SizedBox(height: 20),
+        ...steps.asMap().entries.map((e) => Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                  color: const Color(0xFF141428),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.07))),
+              child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF6C63FF)
+                                .withOpacity(0.15),
+                            border: Border.all(
+                                color: const Color(0xFF6C63FF)
+                                    .withOpacity(0.3))),
+                        child: Center(
+                            child: Text('${e.key + 1}',
+                                style: const TextStyle(
+                                    color: Color(0xFF6C63FF),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800)))),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: Text(e.value,
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.75),
+                                fontSize: 14,
+                                height: 1.5))),
+                  ]),
+            )),
+        const SizedBox(height: 8),
+        Container(
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF141428),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: Colors.white.withOpacity(0.08), width: 1),
-            ),
-            child: Row(
-              children: [
-                Text(w['emoji']!,
-                    style: const TextStyle(fontSize: 18)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(w['text']!,
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.65),
-                          fontSize: 11,
-                          height: 1.3),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
-          )).toList(),
-        ),
-      ],
+                color: const Color(0xFF6C63FF).withOpacity(0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: const Color(0xFF6C63FF).withOpacity(0.15))),
+            child: Text('Science: $_groundNote',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 12,
+                    height: 1.5))),
+      ]),
     );
   }
 
-  // ── Log urge CTA ───────────────────────────────────────────────
-  Widget _buildLogUrgeButton() {
-    return Column(
-      children: [
-        SizedBox(
+  String get _groundNote {
+    final e = widget.warning.dominantEmotion;
+    if (e == 'Anxious' || e == 'Stressed')
+      return 'Cold stimulation activates the dive reflex, '
+          'immediately lowering heart rate (clinically validated).';
+    if (e == 'Lonely')
+      return 'Even a 2-min conversation reduces cortisol and '
+          'raises oxytocin — the opposite of addiction chemistry.';
+    if (e == 'Bored')
+      return 'Boredom cravings are environment-specific cues. '
+          'Changing location breaks the cue-routine-reward loop.';
+    if (e == 'Angry' || e == 'Frustrated')
+      return 'Physical exertion metabolises cortisol and releases '
+          'endorphins — directly counteracting the urge signal.';
+    if (e == 'Sad' || e == 'Depressed')
+      return 'Affect labelling activates the prefrontal cortex, '
+          'reducing amygdala-driven craving by up to 40%.';
+    return 'Sensory grounding anchors attention in the present moment, '
+        'interrupting the automatic craving loop (DBT research, 2003).';
+  }
+
+  // ── Intervention steps panel ───────────────────────────────────
+  Widget _stepsPanel(PreRelapseWarningModel w) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        decoration: BoxDecoration(
+            color: const Color(0xFF141428),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: Colors.white.withOpacity(0.07))),
+        child: Column(children: [
+          GestureDetector(
+              onTap: () =>
+                  setState(() => _stepsExpanded = !_stepsExpanded),
+              child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(children: [
+                    const Icon(Icons.tips_and_updates_outlined,
+                        color: Color(0xFF6C63FF), size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                        '${w.interventionSteps.length} personalised steps',
+                        style: const TextStyle(
+                            color: Color(0xFF6C63FF),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    Icon(
+                        _stepsExpanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white.withOpacity(0.3),
+                        size: 18),
+                  ]))),
+          if (_stepsExpanded)
+            ...w.interventionSteps.asMap().entries.map((e) => Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(e.value.emoji,
+                            style: const TextStyle(fontSize: 20)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                              Text(e.value.title,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 3),
+                              Text(e.value.description,
+                                  style: TextStyle(
+                                      color:
+                                          Colors.white.withOpacity(0.5),
+                                      fontSize: 11,
+                                      height: 1.4)),
+                            ])),
+                      ]),
+                )),
+        ]),
+      );
+
+  // ── Log urge button ────────────────────────────────────────────
+  Widget _logUrgeBtn() => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+        child: SizedBox(
           width: double.infinity,
-          height: 56,
+          height: 52,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6C63FF), Color(0xFF00C4A0)],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF6C63FF).withOpacity(0.4),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                    colors: [_sevColor, _sevColor.withOpacity(0.7)]),
+                boxShadow: [
+                  BoxShadow(
+                      color: _sevColor.withOpacity(0.3),
+                      blurRadius: 16,
+                      offset: const Offset(0, 5))
+                ]),
             child: ElevatedButton.icon(
-              onPressed: () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const UrgeLogScreen()),
-              ),
-              icon: const Icon(Icons.flash_on_rounded,
-                  color: Colors.white, size: 22),
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.edit_note_rounded,
+                  color: Colors.white, size: 20),
               label: const Text('Log This Urge',
                   style: TextStyle(
                       color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700)),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18)),
-              ),
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16))),
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'I\'m feeling better, go back',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.3),
-                  fontSize: 14),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+      );
 }
 
-// ─────────────────────────────────────────────────────────────
-//  WAVE PAINTER
-// ─────────────────────────────────────────────────────────────
+// ── Wave Widget ────────────────────────────────────────────────
+
+class _WaveWidget extends StatefulWidget {
+  final Color color;
+  const _WaveWidget({required this.color});
+  @override
+  State<_WaveWidget> createState() => _WaveState();
+}
+
+class _WaveState extends State<_WaveWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(seconds: 3))
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 80,
+        child: AnimatedBuilder(
+            animation: _ctrl,
+            builder: (_, __) => CustomPaint(
+                size: const Size(double.infinity, 80),
+                painter: _WavePainter(_ctrl.value, widget.color))),
+      );
+}
+
+// ── Wave Painter ───────────────────────────────────────────────
+
 class _WavePainter extends CustomPainter {
   final double progress;
-  final Color  color;
-  _WavePainter({required this.progress, required this.color});
+  final Color color;
+  _WavePainter(this.progress, this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color.withOpacity(0.15)
+      ..color = color.withOpacity(0.35)
       ..style = PaintingStyle.fill;
-
-    final paint2 = Paint()
-      ..color = color.withOpacity(0.25)
-      ..style = PaintingStyle.fill;
-
-    _drawWave(canvas, size, paint,  progress,       0.6);
-    _drawWave(canvas, size, paint2, progress + 0.3, 0.4);
-  }
-
-  void _drawWave(Canvas canvas, Size size, Paint paint,
-      double offset, double heightRatio) {
     final path = Path();
-    final h    = size.height * heightRatio;
-    final baseY= size.height * (1 - heightRatio * 0.5);
-
-    path.moveTo(0, baseY);
+    path.moveTo(0, size.height * 0.5);
     for (double x = 0; x <= size.width; x++) {
-      final y = baseY +
+      final y = size.height * 0.5 +
           math.sin((x / size.width * 2 * math.pi) +
-                  (offset * 2 * math.pi)) *
-              h *
-              0.5;
+                  progress * 2 * math.pi) *
+              18;
       path.lineTo(x, y);
     }
     path.lineTo(size.width, size.height);
     path.lineTo(0, size.height);
     path.close();
     canvas.drawPath(path, paint);
+
+    final paint2 = Paint()
+      ..color = color.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    final path2 = Path();
+    path2.moveTo(0, size.height * 0.5);
+    for (double x = 0; x <= size.width; x++) {
+      final y = size.height * 0.5 +
+          math.sin((x / size.width * 2 * math.pi) +
+                  (progress + 0.3) * 2 * math.pi) *
+              12;
+      path2.lineTo(x, y);
+    }
+    path2.lineTo(size.width, size.height);
+    path2.lineTo(0, size.height);
+    path2.close();
+    canvas.drawPath(path2, paint2);
   }
 
   @override
-  bool shouldRepaint(_WavePainter old) => old.progress != progress;
-}
-
-// ─────────────────────────────────────────────────────────────
-//  HELPER WIDGETS
-// ─────────────────────────────────────────────────────────────
-
-class _ContextChip extends StatelessWidget {
-  final String label;
-  final Color  color;
-  const _ContextChip({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.25), width: 1),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-class _PhaseChip extends StatelessWidget {
-  final String label;
-  final int    seconds;
-  final Color  color;
-  const _PhaseChip(
-      {required this.label,
-      required this.seconds,
-      required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 44, height: 44,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withOpacity(0.12),
-            border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-          ),
-          child: Center(
-            child: Text('${seconds}s',
-                style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800)),
-          ),
-        ),
-        const SizedBox(height: 5),
-        Text(label,
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.45),
-                fontSize: 11)),
-      ],
-    );
-  }
+  bool shouldRepaint(_WavePainter old) => true;
 }

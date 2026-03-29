@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ══════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ══════════════════════════════════════════════════════════════
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // Checks that the requesting user is one of the two participants
+    // in a thread whose ID is "{uid1}_{uid2}" (sorted alphabetically).
+    function isThreadParticipant(threadId) {
+      let parts = threadId.split('_');
+      return isAuth() && (
+        request.auth.uid == parts[0] ||
+        request.auth.uid == parts[1]
+      );
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // USERS
+    // ══════════════════════════════════════════════════════════════
+    match /users/{userId} {
+      // Any authenticated user can read profiles (needed for search,
+      // online status streams, and recipient info lookup).
+      allow read: if isAuth();
+
+      // Only the owner can create / update / delete their own document.
+      allow create: if isOwner(userId)
+                    && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isOwner(userId);
+
+      // ── Friends subcollection ──────────────────────────────────
+      match /friends/{friendUid} {
+        // Owner reads their own friend list.
+        allow read: if isOwner(userId);
+        // Written by acceptRequest (batch) running as the accepting user
+        // who is themselves the owner of their own friends subcollection.
+        allow write: if isOwner(userId);
+      }
+
+      // ── Incoming friend requests ───────────────────────────────
+      match /friend_requests/{reqId} {
+        // Owner reads their incoming requests.
+        allow read: if isOwner(userId);
+        // Any authenticated user can create a request targeting this user.
+        // Validate that fromUid matches the sender.
+        allow create: if isAuth()
+                      && request.resource.data.fromUid == request.auth.uid;
+        // Owner can update status (accept / decline).
+        allow update: if isOwner(userId);
+        // Owner or sender can delete (cancel).
+        allow delete: if isOwner(userId)
+                      || (isAuth()
+                          && resource.data.fromUid == request.auth.uid);
+      }
+
+      // ── Sent requests (outgoing tracking) ─────────────────────
+      // NEW: required by FriendService.sendRequest / cancelRequest /
+      //      batchRelationshipCheck / sentRequestsStream.
+      match /sent_requests/{reqId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // ── DM inbox index ─────────────────────────────────────────
+      match /dm_threads/{threadId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // ── Stats (streak etc.) ────────────────────────────────────
+      match /stats/{doc} {
+        allow read: if isAuth();          // any user can read streak for display
+        allow write: if isOwner(userId);
+      }
+
+      // ── Analytics ──────────────────────────────────────────────
+      match /analytics/{doc} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // DM THREADS
+    //
+    // Thread doc path:  dm_threads/{tid}
+    // Thread ID format: "{uid1}_{uid2}"  (uids sorted ascending)
+    //
+    // The thread document is created with a `participants` array by
+    // DmService.sendMessage() / FriendService._sendFriendAcceptedMessage().
+    // Rules use the deterministic ID to validate access WITHOUT a
+    // database get(), keeping read costs at zero.
+    // ══════════════════════════════════════════════════════════════
+    match /dm_threads/{threadId} {
+      // Participants (derived from thread ID) can read/write the root doc.
+      allow read:   if isThreadParticipant(threadId);
+      allow create: if isThreadParticipant(threadId)
+                    && request.resource.data.participants.hasAll([request.auth.uid]);
+      allow update: if isThreadParticipant(threadId);
+      allow delete: if false;  // threads are never hard-deleted from client
+
+      // ── Messages ────────────────────────────────────────────────
+      match /messages/{msgId} {
+        // Both participants can read all messages.
+        allow read: if isThreadParticipant(threadId);
+
+        // Only participants can create; sender must be self.
+        allow create: if isThreadParticipant(threadId)
+                      && (request.resource.data.senderId == request.auth.uid
+                          || request.resource.data.senderId == 'system');
+
+        // Allow update for:
+        //   • Status changes (delivered / read) — by either participant
+        //   • Soft delete — only by sender
+        //   • Reactions toggle — by either participant
+        //   • Edit — only by sender
+        allow update: if isThreadParticipant(threadId)
+                      && (
+                        // Sender can do anything to their own messages
+                        resource.data.senderId == request.auth.uid
+                        ||
+                        // Either participant can update status and reactions
+                        (request.resource.data.diff(resource.data).affectedKeys()
+                            .hasOnly(['status', 'reactions']))
+                      );
+
+        // No hard deletes from client
+        allow delete: if false;
+      }
+
+      // ── Typing indicators ────────────────────────────────────────
+      // Users write only their own typing doc; both participants can read.
+      match /typing/{uid} {
+        allow read:  if isThreadParticipant(threadId);
+        allow write: if isThreadParticipant(threadId)
+                     && request.auth.uid == uid;
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // GAME ROOMS
+    // ══════════════════════════════════════════════════════════════
+    match /game_rooms/{roomId} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if isAuth()
+                            && resource.data.players != null
+                            && request.auth.uid in resource.data.players;
+
+      match /moves/{moveId} {
+        allow read:   if isAuth();
+        allow create: if isAuth();
+        allow update, delete: if isAuth()
+                              && request.auth.uid == resource.data.playerId;
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // POSTS
+    // ══════════════════════════════════════════════════════════════
+    match /posts/{postId} {
+      allow read:   if isAuth();
+      allow create: if isAuth()
+                    && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isAuth()
+                            && request.auth.uid == resource.data.authorId;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // NOTIFICATIONS
+    // ══════════════════════════════════════════════════════════════
+    match /notifications/{userId}/items/{notifId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}

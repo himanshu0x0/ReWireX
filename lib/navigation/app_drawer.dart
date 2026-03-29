@@ -3,16 +3,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:rewirex/features/ai_coach/screens/ai_coach_screen.dart';
+import 'package:rewirex/features/connect/connect_screen.dart';
+import 'package:rewirex/features/connect/games/screens/games_hub_screen.dart';
+import 'package:rewirex/features/connect/wellness/screens/wellness_hub_screen.dart';
+import 'package:rewirex/features/connect/stories/screens/stories_screen.dart';
 import 'package:rewirex/features/profile/screens/profile_screen.dart';
 import 'package:rewirex/features/profile/services/profile_service.dart';
 import 'package:rewirex/features/terms/screens/terms_screen.dart';
-// ── These exist in your full project — adjust paths if needed ──
 import 'package:rewirex/features/urge/screens/urge_history_screen.dart';
 import 'package:rewirex/features/settings/screens/settings_screen.dart';
 
 /// 🗂 App Drawer
 /// Slides in from the left (hamburger menu).
-/// Contains: profile summary, AI Coach, Help & Support, and links.
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
 
@@ -42,7 +44,13 @@ class _AppDrawerState extends State<AppDrawer> {
         ? _profile!.displayName
         : (user?.email?.split('@').first ?? 'User');
     final initials = name.trim().isNotEmpty
-        ? name.trim().split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase()
+        ? name
+            .trim()
+            .split(' ')
+            .map((w) => w.isNotEmpty ? w[0] : '')
+            .take(2)
+            .join()
+            .toUpperCase()
         : 'U';
     final score = _profile?.completionScore ?? 0;
 
@@ -51,20 +59,20 @@ class _AppDrawerState extends State<AppDrawer> {
       child: SafeArea(
         child: Column(
           children: [
-            // ── Header ──────────────────────────────────────
+            // ── Header ──────────────────────────────────────────
             _buildHeader(context, name, initials, score, user?.email ?? ''),
 
             const SizedBox(height: 8),
 
-            // ── Profile incomplete nudge ────────────────────
+            // ── Profile incomplete nudge ─────────────────────
             if (score < 100) _buildProfileNudge(context, score),
 
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 children: [
-
-                  // ── Main nav ─────────────────────────────
+                  // ── Main nav ──────────────────────────────────
                   _DrawerSection(label: 'MAIN'),
                   _DrawerTile(
                     icon: Icons.home_outlined,
@@ -72,10 +80,74 @@ class _AppDrawerState extends State<AppDrawer> {
                     onTap: () => Navigator.pop(context),
                   ),
 
+                  const SizedBox(height: 8),
+
+                  // ── Connect & Community ───────────────────────
+                  _DrawerSection(label: 'COMMUNITY'),
+
+                  // 1. Full Connect Hub
+                  _DrawerTile(
+                    icon: Icons.people_alt_outlined,
+                    label: 'Connect Hub',
+                    subtitle: 'Friends, rooms, games & wellness',
+                    gradient: true,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ConnectScreen()));
+                    },
+                  ),
+
+                  // 2. Truth & Dare quick-link
+                  _DrawerTile(
+                    icon: Icons.casino_outlined,
+                    label: 'Truth & Dare',
+                    subtitle: 'Play with warriors worldwide',
+                    iconColor: const Color(0xFFFF6B6B),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const GamesHubScreen()));
+                    },
+                  ),
+
+                  // 3. Stories quick-link
+                  _DrawerTile(
+                    icon: Icons.auto_stories_outlined,
+                    label: 'Recovery Stories',
+                    subtitle: 'Read & share journeys',
+                    iconColor: const Color(0xFFFFB74D),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const StoriesScreen()));
+                    },
+                  ),
+
+                  // 4. Wellness quick-link
+                  _DrawerTile(
+                    icon: Icons.self_improvement_rounded,
+                    label: 'Wellness Hub',
+                    subtitle: 'Breathe, meditate, journal',
+                    iconColor: const Color(0xFF4FC3F7),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const WellnessHubScreen()));
+                    },
+                  ),
 
                   const SizedBox(height: 8),
 
-                  // ── History & Settings ───────────────────
+                  // ── History & Settings ────────────────────────
                   _DrawerSection(label: 'TOOLS'),
                   _DrawerTile(
                     icon: Icons.history_rounded,
@@ -83,8 +155,10 @@ class _AppDrawerState extends State<AppDrawer> {
                     subtitle: 'Review all logged urges',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const UrgeHistoryScreen()));
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const UrgeHistoryScreen()));
                     },
                   ),
                   _DrawerTile(
@@ -92,14 +166,16 @@ class _AppDrawerState extends State<AppDrawer> {
                     label: 'Settings',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const SettingsScreen()));
                     },
                   ),
 
                   const SizedBox(height: 8),
 
-                  // ── Support ──────────────────────────────
+                  // ── Support ───────────────────────────────────
                   _DrawerSection(label: 'SUPPORT'),
                   _DrawerTile(
                     icon: Icons.support_agent_rounded,
@@ -108,8 +184,10 @@ class _AppDrawerState extends State<AppDrawer> {
                     gradient: true,
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const AICoachScreen()));
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const AICoachScreen()));
                     },
                   ),
                   _DrawerTile(
@@ -130,14 +208,16 @@ class _AppDrawerState extends State<AppDrawer> {
                     label: 'Terms of Service',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const TermsScreen()));
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const TermsScreen()));
                     },
                   ),
 
                   const SizedBox(height: 8),
 
-                  // ── Account ───────────────────────────────
+                  // ── Account ───────────────────────────────────
                   _DrawerSection(label: 'ACCOUNT'),
                   _DrawerTile(
                     icon: Icons.logout_rounded,
@@ -152,14 +232,13 @@ class _AppDrawerState extends State<AppDrawer> {
               ),
             ),
 
-            // ── Footer version ───────────────────────────────
+            // ── Footer ──────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
                 'ReWireX v1.0.0',
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.2),
-                    fontSize: 11),
+                    color: Colors.white.withOpacity(0.2), fontSize: 11),
               ),
             ),
           ],
@@ -168,7 +247,7 @@ class _AppDrawerState extends State<AppDrawer> {
     );
   }
 
-  // ── Header ──────────────────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────────
   Widget _buildHeader(BuildContext context, String name, String initials,
       int score, String email) {
     return GestureDetector(
@@ -190,14 +269,16 @@ class _AppDrawerState extends State<AppDrawer> {
             end: Alignment.bottomRight,
           ),
           border: Border(
-            bottom: BorderSide(color: Colors.white.withOpacity(0.07), width: 1),
+            bottom:
+                BorderSide(color: Colors.white.withOpacity(0.07), width: 1),
           ),
         ),
         child: Row(
           children: [
             // Avatar
             Container(
-              width: 52, height: 52,
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
@@ -233,10 +314,10 @@ class _AppDrawerState extends State<AppDrawer> {
                   const SizedBox(height: 2),
                   Text(email,
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.4), fontSize: 11),
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 11),
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 6),
-                  // Mini completion bar
                   Row(children: [
                     Expanded(
                       child: ClipRRect(
@@ -246,9 +327,11 @@ class _AppDrawerState extends State<AppDrawer> {
                           minHeight: 4,
                           backgroundColor: Colors.white.withOpacity(0.1),
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            score >= 80 ? const Color(0xFF00C4A0)
-                                : score >= 50 ? Colors.amber
-                                : const Color(0xFFE53935),
+                            score >= 80
+                                ? const Color(0xFF00C4A0)
+                                : score >= 50
+                                    ? Colors.amber
+                                    : const Color(0xFFE53935),
                           ),
                         ),
                       ),
@@ -271,7 +354,7 @@ class _AppDrawerState extends State<AppDrawer> {
     );
   }
 
-  // ── Profile incomplete nudge ─────────────────────────────────
+  // ── Profile incomplete nudge ───────────────────────────────────
   Widget _buildProfileNudge(BuildContext context, int score) {
     return GestureDetector(
       onTap: () {
@@ -309,22 +392,22 @@ class _AppDrawerState extends State<AppDrawer> {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  HELP & SUPPORT BOTTOM SHEET
+//  ABOUT DIALOG
 // ══════════════════════════════════════════════════════════════
-
-
 
 void _showAbout(BuildContext context) {
   showDialog(
     context: context,
     builder: (_) => AlertDialog(
       backgroundColor: const Color(0xFF161625),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 64, height: 64,
+            width: 64,
+            height: 64,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
               gradient: const LinearGradient(
@@ -336,16 +419,23 @@ void _showAbout(BuildContext context) {
           const SizedBox(height: 14),
           const Text('ReWireX',
               style: TextStyle(
-                  color: Colors.white, fontSize: 23, fontWeight: FontWeight.w800)),
+                  color: Colors.white,
+                  fontSize: 23,
+                  fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
           Text('Version 1.0.0',
-              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13)),
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.4), fontSize: 13)),
           const SizedBox(height: 14),
           Text(
-            'ReWireX is an AI-powered addiction recovery companion that helps you build lasting habits through behavioral analytics, risk prediction, and intelligent coaching.',
+            'ReWireX is an AI-powered addiction recovery companion that '
+            'helps you build lasting habits through behavioral analytics, '
+            'risk prediction, and intelligent coaching.',
             textAlign: TextAlign.center,
             style: TextStyle(
-                color: Colors.white.withOpacity(0.55), fontSize: 14, height: 1.6),
+                color: Colors.white.withOpacity(0.55),
+                fontSize: 14,
+                height: 1.6),
           ),
         ],
       ),
@@ -354,9 +444,11 @@ void _showAbout(BuildContext context) {
           onPressed: () => Navigator.pop(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF6C63FF),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
           ),
-          child: const Text('Close', style: TextStyle(color: Colors.white)),
+          child:
+              const Text('Close', style: TextStyle(color: Colors.white)),
         ),
       ],
     ),
@@ -398,7 +490,7 @@ class _DrawerTile extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.subtitle,
-    this.gradient   = false,
+    this.gradient = false,
     this.iconColor,
   });
 
@@ -416,12 +508,14 @@ class _DrawerTile extends StatelessWidget {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: gradient
-              ? Border.all(color: const Color(0xFF6C63FF).withOpacity(0.2), width: 1)
+              ? Border.all(
+                  color: const Color(0xFF6C63FF).withOpacity(0.2), width: 1)
               : null,
         ),
         child: Row(children: [
           Container(
-            width: 34, height: 34,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(9),
               color: gradient ? Colors.transparent : ic.withOpacity(0.08),
@@ -433,8 +527,8 @@ class _DrawerTile extends StatelessWidget {
                     )
                   : null,
             ),
-            child: Icon(icon,
-                color: gradient ? Colors.white : ic, size: 16),
+            child:
+                Icon(icon, color: gradient ? Colors.white : ic, size: 16),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -443,13 +537,18 @@ class _DrawerTile extends StatelessWidget {
               children: [
                 Text(label,
                     style: TextStyle(
-                        color: gradient ? Colors.white : Colors.white.withOpacity(0.85),
+                        color: gradient
+                            ? Colors.white
+                            : Colors.white.withOpacity(0.85),
                         fontSize: 15,
-                        fontWeight: gradient ? FontWeight.w700 : FontWeight.w500)),
+                        fontWeight: gradient
+                            ? FontWeight.w700
+                            : FontWeight.w500)),
                 if (subtitle != null)
                   Text(subtitle!,
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.35), fontSize: 11)),
+                          color: Colors.white.withOpacity(0.35),
+                          fontSize: 11)),
               ],
             ),
           ),
