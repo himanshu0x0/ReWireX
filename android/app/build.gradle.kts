@@ -10,7 +10,8 @@ android {
 
     compileSdk = 36   // ✅ IMPORTANT
 
-    ndkVersion = "27.0.12077973"   // ✅ IMPORTANT
+    // Remove explicit NDK pin so Gradle can use a valid SDK-managed NDK install.
+    // ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

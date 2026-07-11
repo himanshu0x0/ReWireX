@@ -38,7 +38,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   int    _step           = 1;
   bool   _loading        = false;
   bool   _obscure        = true;
-  bool   _isNewUser      = false;
   String _verificationId = '';
   String _countryCode    = '+91';
   String _savedEmail     = '';
@@ -133,7 +132,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     if (existingEmail.isNotEmpty && hasUsername) {
       // ── Existing user — go straight to home ──────────────────
-      setState(() => _isNewUser = false);
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const AuthWrapper()),
@@ -143,7 +141,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     } else {
       // ── New user — must link email before entering app ────────
       setState(() {
-        _isNewUser = true;
         _step      = 3;
       });
     }

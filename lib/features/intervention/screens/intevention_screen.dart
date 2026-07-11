@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/intervention_model.dart';
+import '../data/intervention_techniques.dart';
 import '../services/adaptive_intervention_service.dart';
 import '../services/intervention_feedback_service.dart';
 import '../models/intervention_feedback_model.dart';
@@ -96,14 +97,38 @@ class _InterventionScreenState extends State<InterventionScreen>
         CurvedAnimation(parent: _progressController, curve: Curves.easeOut);
   }
 
+  // ── FIX: wrapped in try/catch with a guaranteed fallback model ──
+  // Previously, any error thrown inside RiskPredictionService.analyzeRisk()
+  // or AdaptiveInterventionService.generateIntervention() (e.g. a Firestore
+  // permission-denied error) was never caught. That left `_model` as null
+  // forever, so build() kept returning the loading spinner indefinitely
+  // ("Selecting your technique…" never resolving). Now, any failure falls
+  // back to a safe default technique instead of hanging the screen.
   Future<void> _loadIntervention() async {
-    final risk = await RiskPredictionService().analyzeRisk();
-    _riskLevel = risk?.level ?? 'Low';
+    InterventionModel? model;
 
-    final model = await _service.generateIntervention(
-      emotion: widget.emotion,
-      intensity: widget.intensity,
-    );
+    try {
+      final risk = await RiskPredictionService().analyzeRisk();
+      _riskLevel = risk?.level ?? 'Low';
+    } catch (e) {
+      debugPrint('Risk Analysis Error: $e');
+      _riskLevel = 'Low';
+    }
+
+    try {
+      model = await _service.generateIntervention(
+        emotion: widget.emotion,
+        intensity: widget.intensity,
+      );
+    } catch (e) {
+      debugPrint('Generate Intervention Error: $e');
+    }
+
+    // Guaranteed fallback so the screen can never get stuck loading.
+    model ??= widget.intensity >= 9
+        ? InterventionTechniques.emergencyReset
+        : InterventionTechniques.microReset;
+
     if (mounted) setState(() => _model = model);
   }
 
