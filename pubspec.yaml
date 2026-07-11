@@ -62,5 +62,22 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+  flutter_launcher_icons: ^0.14.3
+
 flutter:
   uses-material-design: true
+
+  assets:
+    - assests/icon.png
+
+# ══════════════════════════════════════════════════════════════
+# APP ICON CONFIG (used by flutter_launcher_icons package)
+# Source: /home/himanshu/Projects/rewirex/assests/icon.png
+# ══════════════════════════════════════════════════════════════
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assests/icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#0D0D1A"
+  adaptive_icon_foreground: "assests/icon.png"
