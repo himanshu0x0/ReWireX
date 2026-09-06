@@ -7,6 +7,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:rewirex/features/connect/games/models/game_question_model.dart';
 import '../models/game_room_model.dart';
 import '../services/game_room_service.dart';
 
@@ -856,10 +857,11 @@ class _GameState extends State<GameRoomScreen>
             child: OutlinedButton.icon(
               onPressed: () async {
                 await _svc.completeTurn(
-                    roomId: widget.roomId, room: room,
-                    players: players, completed: false,
-                    questionText: q.text,
-                    questionType: q.type);
+  roomId: widget.roomId,
+  completed: false,
+  questionText: q.text,
+  questionType: q.type,
+);
                 setState(() { _picked = false; _currentQ = null; });
               },
               icon: const Icon(Icons.close_rounded,
@@ -875,11 +877,12 @@ class _GameState extends State<GameRoomScreen>
           Expanded(child: SizedBox(height: 52,
             child: ElevatedButton.icon(
               onPressed: () async {
-                await _svc.completeTurn(
-                    roomId: widget.roomId, room: room,
-                    players: players, completed: true,
-                    questionText: q.text,
-                    questionType: q.type);
+               await _svc.completeTurn(
+  roomId: widget.roomId,
+  completed: true,
+  questionText: q.text,
+  questionType: q.type,
+);
                 setState(() { _picked = false; _currentQ = null; });
               },
               icon: const Icon(Icons.check_rounded,

@@ -513,8 +513,14 @@ class _FriendTile extends StatelessWidget {
 
 // ══════════════════════════════════════════════════════════════
 // INCOMING REQUEST TILE
+// FIX: converted to StatefulWidget so Accept/Decline can show a
+// loading state, catch errors instead of failing silently (the
+// previous StatelessWidget version left both actions unawaited /
+// uncaught, so a permission-denied error — or any other failure —
+// simply did nothing with no feedback), and disable the buttons
+// while a request is in flight to prevent double-taps.
 // ══════════════════════════════════════════════════════════════
-class _IncomingRequestTile extends StatelessWidget {
+class _IncomingRequestTile extends StatefulWidget {
   final FriendRequestModel request;
   final FriendService      fsvc;
   final VoidCallback       onAccepted;
@@ -525,13 +531,64 @@ class _IncomingRequestTile extends StatelessWidget {
     required this.onAccepted,
   });
 
+  @override
+  State<_IncomingRequestTile> createState() => _IncomingRequestTileState();
+}
+
+class _IncomingRequestTileState extends State<_IncomingRequestTile> {
+  bool _isProcessing = false;
+
   String _initials(String n) => n.trim().isNotEmpty
       ? n.trim().split(' ').map((w) => w.isNotEmpty ? w[0] : '')
           .take(2).join().toUpperCase()
       : 'U';
 
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: const Color(0xFFE53935),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.all(16),
+    ));
+  }
+
+  Future<void> _accept() async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+    try {
+      await widget.fsvc.acceptRequest(widget.request);
+      HapticFeedback.mediumImpact();
+      widget.onAccepted();
+      // No setState after success — the parent stream will remove
+      // this tile once the request's status flips to 'accepted'.
+    } catch (e) {
+      debugPrint('Accept Request Error: $e');
+      if (mounted) setState(() => _isProcessing = false);
+      _showError('Could not accept request. Please try again.');
+    }
+  }
+
+  Future<void> _decline() async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+    try {
+      await widget.fsvc.declineRequest(
+          widget.request.id, widget.request.fromUid);
+      HapticFeedback.mediumImpact();
+      // No setState after success — the parent stream will remove
+      // this tile once the request's status flips to 'declined'.
+    } catch (e) {
+      debugPrint('Decline Request Error: $e');
+      if (mounted) setState(() => _isProcessing = false);
+      _showError('Could not decline request. Please try again.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final request = widget.request;
     final init = _initials(request.fromDisplayName);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -568,23 +625,24 @@ class _IncomingRequestTile extends StatelessWidget {
         Row(children: [
           Expanded(child: SizedBox(height: 44,
             child: ElevatedButton(
-              onPressed: () async {
-                await fsvc.acceptRequest(request);
-                HapticFeedback.mediumImpact();
-                onAccepted();
-              },
+              onPressed: _isProcessing ? null : _accept,
               style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6C63FF),
+                  disabledBackgroundColor:
+                      const Color(0xFF6C63FF).withOpacity(0.4),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12))),
-              child: const Text('Accept', style: TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w700))))),
+              child: _isProcessing
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.2, color: Colors.white))
+                  : const Text('Accept', style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w700))))),
           const SizedBox(width: 10),
           Expanded(child: SizedBox(height: 44,
             child: OutlinedButton(
-              // declineRequest now takes (requestId, fromUid) — both args
-              onPressed: () => fsvc.declineRequest(
-                  request.id, request.fromUid),
+              onPressed: _isProcessing ? null : _decline,
               style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.white.withOpacity(0.2)),
                   shape: RoundedRectangleBorder(

@@ -165,6 +165,11 @@ class _DmScreenState extends State<DmScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D1A),
+      // FIX: explicit true (was relying on the default) — the Scaffold
+      // already resizes the body to sit above the keyboard. The input
+      // bar's own padding must NOT also add viewInsets.bottom on top
+      // of this, or the gap gets counted twice (see _buildInputBar).
+      resizeToAvoidBottomInset: true,
       appBar: _buildAppBar(),
       body: Column(children: [
         Expanded(child: _buildMessageList()),
@@ -402,62 +407,75 @@ class _DmScreenState extends State<DmScreen> with WidgetsBindingObserver {
     ]));
 
   // ── Input bar ──────────────────────────────────────────────
+  // FIX: previously this manually added MediaQuery.viewInsets.bottom
+  // (the keyboard height) to its own bottom padding. But the Scaffold
+  // already resizes its body to sit above the keyboard by that exact
+  // amount (resizeToAvoidBottomInset: true), so the keyboard height
+  // was being accounted for TWICE — once by the Scaffold shifting the
+  // whole body up, and again by this extra padding on top of that —
+  // leaving a large empty gap between the input bar and the actual
+  // keyboard. Now it just uses SafeArea for the bottom system inset
+  // (home-indicator / gesture bar) when the keyboard is closed, and
+  // relies on the Scaffold alone when it's open.
   Widget _buildInputBar() {
     final editing = _editingMsg != null;
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-          16, 10, 16, MediaQuery.of(context).viewInsets.bottom + 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D1A),
-        border: Border(
-            top: BorderSide(color: Colors.white.withOpacity(0.06))),
-      ),
-      child: Row(children: [
-        Expanded(child: Container(
-          decoration: BoxDecoration(
-              color: const Color(0xFF141428),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                  color: editing
-                      ? const Color(0xFFFFB300).withOpacity(0.4)
-                      : Colors.white.withOpacity(0.08))),
-          child: TextField(
-            controller: _ctrl,
-            maxLines: null,
-            style: const TextStyle(color: Colors.white, fontSize: 15),
-            textCapitalization: TextCapitalization.sentences,
-            decoration: InputDecoration(
-              hintText: editing ? 'Edit message…' : 'Message…',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.25)),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 18, vertical: 12)),
-            onSubmitted: (_) => _send()),
-        )),
-        const SizedBox(width: 10),
-        GestureDetector(
-          onTap: _send,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 46, height: 46,
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0D1A),
+          border: Border(
+              top: BorderSide(color: Colors.white.withOpacity(0.06))),
+        ),
+        child: Row(children: [
+          Expanded(child: Container(
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(colors: editing
-                  ? [const Color(0xFFFFB300), const Color(0xFFFF6F00)]
-                  : [const Color(0xFF6C63FF), const Color(0xFF00C4A0)]),
-              boxShadow: [BoxShadow(
-                  color: (editing
-                      ? const Color(0xFFFFB300)
-                      : const Color(0xFF6C63FF)).withOpacity(0.4),
-                  blurRadius: 12, offset: const Offset(0, 4))]),
-            child: _sending
-                ? const Padding(padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : Icon(
-                    editing ? Icons.check_rounded : Icons.send_rounded,
-                    color: Colors.white, size: 20))),
-      ]));
+                color: const Color(0xFF141428),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                    color: editing
+                        ? const Color(0xFFFFB300).withOpacity(0.4)
+                        : Colors.white.withOpacity(0.08))),
+            child: TextField(
+              controller: _ctrl,
+              maxLines: null,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                hintText: editing ? 'Edit message…' : 'Message…',
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.25)),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 18, vertical: 12)),
+              onSubmitted: (_) => _send()),
+          )),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: _send,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 46, height: 46,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(colors: editing
+                    ? [const Color(0xFFFFB300), const Color(0xFFFF6F00)]
+                    : [const Color(0xFF6C63FF), const Color(0xFF00C4A0)]),
+                boxShadow: [BoxShadow(
+                    color: (editing
+                        ? const Color(0xFFFFB300)
+                        : const Color(0xFF6C63FF)).withOpacity(0.4),
+                    blurRadius: 12, offset: const Offset(0, 4))]),
+              child: _sending
+                  ? const Padding(padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : Icon(
+                      editing ? Icons.check_rounded : Icons.send_rounded,
+                      color: Colors.white, size: 20))),
+        ]),
+      ),
+    );
   }
 
   // ── Chat options ───────────────────────────────────────────
