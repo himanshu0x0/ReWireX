@@ -8,8 +8,8 @@ import '../models/friend_model.dart';
 import '../models/friend_request_model.dart';
 
 class FriendService {
-  final FirebaseFirestore _db   = FirebaseFirestore.instance;
-  final FirebaseAuth      _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   String get _uid => _auth.currentUser!.uid;
 
   // ══════════════════════════════════════════════════════════════
@@ -59,15 +59,16 @@ class FriendService {
   // Returns uid → 'friend' | 'pending' | 'none'
   // Uses whereIn in chunks of 10 (Firestore limit).
   // ══════════════════════════════════════════════════════════════
-  Future<Map<String, String>> batchRelationshipCheck(
-      List<String> uids) async {
+  Future<Map<String, String>> batchRelationshipCheck(List<String> uids) async {
     final result = <String, String>{for (final u in uids) u: 'none'};
     if (uids.isEmpty) return result;
 
     // Check friends
     for (var i = 0; i < uids.length; i += 10) {
       final chunk = uids.sublist(
-          i, (i + 10) > uids.length ? uids.length : i + 10);
+        i,
+        (i + 10) > uids.length ? uids.length : i + 10,
+      );
       final snap = await _db
           .collection('users')
           .doc(_uid)
@@ -111,15 +112,15 @@ class FriendService {
     if (await hasPendingRequest(toUid)) return;
 
     // Fetch MY profile
-    final mySnap  = await _db.collection('users').doc(_uid).get();
-    final my      = mySnap.data() ?? {};
-    final streak  = await _streak(_uid);
+    final mySnap = await _db.collection('users').doc(_uid).get();
+    final my = mySnap.data() ?? {};
+    final streak = await _streak(_uid);
 
     // Fetch RECIPIENT profile so we can store display info in sent_requests
-    final toSnap  = await _db.collection('users').doc(toUid).get();
-    final toData  = toSnap.data() ?? {};
+    final toSnap = await _db.collection('users').doc(toUid).get();
+    final toData = toSnap.data() ?? {};
 
-    final reqRef  = _db
+    final reqRef = _db
         .collection('users')
         .doc(toUid)
         .collection('friend_requests')
@@ -131,21 +132,21 @@ class FriendService {
         .doc(reqRef.id); // same id for easy cross-reference
 
     final sharedData = {
-      'fromUid':         _uid,
-      'fromUsername':    my['username']     ?? '',
-      'fromDisplayName': my['displayName']  ?? '',
-      'fromPhotoUrl':    my['photoUrl']     ?? '',
-      'fromStreak':      streak,
-      'toUid':           toUid,
-      'toUsername':      toData['username']    ?? '',
-      'toDisplayName':   toData['displayName'] ?? '',
-      'toPhotoUrl':      toData['photoUrl']    ?? '',
-      'sentAt':          FieldValue.serverTimestamp(),
-      'status':          'pending',
+      'fromUid': _uid,
+      'fromUsername': my['username'] ?? '',
+      'fromDisplayName': my['displayName'] ?? '',
+      'fromPhotoUrl': my['photoUrl'] ?? '',
+      'fromStreak': streak,
+      'toUid': toUid,
+      'toUsername': toData['username'] ?? '',
+      'toDisplayName': toData['displayName'] ?? '',
+      'toPhotoUrl': toData['photoUrl'] ?? '',
+      'sentAt': FieldValue.serverTimestamp(),
+      'status': 'pending',
     };
 
     final batch = _db.batch();
-    batch.set(reqRef,  sharedData);
+    batch.set(reqRef, sharedData);
     batch.set(sentRef, {...sharedData, 'requestId': reqRef.id});
     await batch.commit();
   }
@@ -154,49 +155,55 @@ class FriendService {
   // ACCEPT FRIEND REQUEST
   // ══════════════════════════════════════════════════════════════
   Future<void> acceptRequest(FriendRequestModel req) async {
-    final batch  = _db.batch();
+    final batch = _db.batch();
     final mySnap = await _db.collection('users').doc(_uid).get();
-    final my     = mySnap.data() ?? {};
-    final myStr  = await _streak(_uid);
-    final now    = FieldValue.serverTimestamp();
+    final my = mySnap.data() ?? {};
+    final myStr = await _streak(_uid);
+    final now = FieldValue.serverTimestamp();
 
     // Add each other to friends subcollections
     batch.set(
       _db.collection('users').doc(_uid).collection('friends').doc(req.fromUid),
       {
-        'uid':           req.fromUid,
-        'username':      req.fromUsername,
-        'displayName':   req.fromDisplayName,
-        'photoUrl':      req.fromPhotoUrl,
-        'addedAt':       now,
+        'uid': req.fromUid,
+        'username': req.fromUsername,
+        'displayName': req.fromDisplayName,
+        'photoUrl': req.fromPhotoUrl,
+        'addedAt': now,
         'currentStreak': req.fromStreak,
-        'isOnline':      false,
+        'isOnline': false,
       },
     );
     batch.set(
       _db.collection('users').doc(req.fromUid).collection('friends').doc(_uid),
       {
-        'uid':           _uid,
-        'username':      my['username']    ?? '',
-        'displayName':   my['displayName'] ?? '',
-        'photoUrl':      my['photoUrl']    ?? '',
-        'addedAt':       now,
+        'uid': _uid,
+        'username': my['username'] ?? '',
+        'displayName': my['displayName'] ?? '',
+        'photoUrl': my['photoUrl'] ?? '',
+        'addedAt': now,
         'currentStreak': myStr,
-        'isOnline':      true,
+        'isOnline': true,
       },
     );
 
     // Mark the incoming request as accepted
     batch.update(
-      _db.collection('users').doc(_uid)
-          .collection('friend_requests').doc(req.id),
+      _db
+          .collection('users')
+          .doc(_uid)
+          .collection('friend_requests')
+          .doc(req.id),
       {'status': 'accepted'},
     );
 
     // Mirror acceptance in sender's sent_requests
     batch.update(
-      _db.collection('users').doc(req.fromUid)
-          .collection('sent_requests').doc(req.id),
+      _db
+          .collection('users')
+          .doc(req.fromUid)
+          .collection('sent_requests')
+          .doc(req.id),
       {'status': 'accepted'},
     );
 
@@ -213,13 +220,19 @@ class FriendService {
   Future<void> declineRequest(String requestId, String fromUid) async {
     final batch = _db.batch();
     batch.update(
-      _db.collection('users').doc(_uid)
-          .collection('friend_requests').doc(requestId),
+      _db
+          .collection('users')
+          .doc(_uid)
+          .collection('friend_requests')
+          .doc(requestId),
       {'status': 'declined'},
     );
     batch.update(
-      _db.collection('users').doc(fromUid)
-          .collection('sent_requests').doc(requestId),
+      _db
+          .collection('users')
+          .doc(fromUid)
+          .collection('sent_requests')
+          .doc(requestId),
       {'status': 'declined'},
     );
     await batch.commit();
@@ -231,10 +244,20 @@ class FriendService {
   // ══════════════════════════════════════════════════════════════
   Future<void> cancelRequest(String toUid, String requestId) async {
     final batch = _db.batch();
-    batch.delete(_db.collection('users').doc(toUid)
-        .collection('friend_requests').doc(requestId));
-    batch.delete(_db.collection('users').doc(_uid)
-        .collection('sent_requests').doc(requestId));
+    batch.delete(
+      _db
+          .collection('users')
+          .doc(toUid)
+          .collection('friend_requests')
+          .doc(requestId),
+    );
+    batch.delete(
+      _db
+          .collection('users')
+          .doc(_uid)
+          .collection('sent_requests')
+          .doc(requestId),
+    );
     await batch.commit();
   }
 
@@ -243,10 +266,12 @@ class FriendService {
   // ══════════════════════════════════════════════════════════════
   Future<void> removeFriend(String friendUid) async {
     final b = _db.batch();
-    b.delete(_db.collection('users').doc(_uid)
-        .collection('friends').doc(friendUid));
-    b.delete(_db.collection('users').doc(friendUid)
-        .collection('friends').doc(_uid));
+    b.delete(
+      _db.collection('users').doc(_uid).collection('friends').doc(friendUid),
+    );
+    b.delete(
+      _db.collection('users').doc(friendUid).collection('friends').doc(_uid),
+    );
     await b.commit();
   }
 
@@ -259,9 +284,7 @@ class FriendService {
       .collection('friends')
       .orderBy('addedAt', descending: true)
       .snapshots()
-      .map((s) => s.docs
-          .map((d) => FriendModel.fromMap(d.data()))
-          .toList());
+      .map((s) => s.docs.map((d) => FriendModel.fromMap(d.data())).toList());
 
   /// Incoming pending requests (for the "Received" tab + badge).
   Stream<List<FriendRequestModel>> incomingRequestsStream() => _db
@@ -271,9 +294,11 @@ class FriendService {
       .where('status', isEqualTo: 'pending')
       .orderBy('sentAt', descending: true)
       .snapshots()
-      .map((s) => s.docs
-          .map((d) => FriendRequestModel.fromMap(d.id, d.data()))
-          .toList());
+      .map(
+        (s) => s.docs
+            .map((d) => FriendRequestModel.fromMap(d.id, d.data()))
+            .toList(),
+      );
 
   /// Outgoing pending requests (for the "Sent" tab).
   Stream<List<FriendRequestModel>> sentRequestsStream() => _db
@@ -283,9 +308,11 @@ class FriendService {
       .where('status', isEqualTo: 'pending')
       .orderBy('sentAt', descending: true)
       .snapshots()
-      .map((s) => s.docs
-          .map((d) => FriendRequestModel.fromMap(d.id, d.data()))
-          .toList());
+      .map(
+        (s) => s.docs
+            .map((d) => FriendRequestModel.fromMap(d.id, d.data()))
+            .toList(),
+      );
 
   /// Real-time online status for a single friend.
   Stream<bool> friendOnlineStream(String friendUid) => _db
@@ -297,13 +324,14 @@ class FriendService {
   // ══════════════════════════════════════════════════════════════
   // HELPERS
   // ══════════════════════════════════════════════════════════════
-  Future<bool> isFriend(String uid) async => (await _db
-      .collection('users')
-      .doc(_uid)
-      .collection('friends')
-      .doc(uid)
-      .get())
-      .exists;
+  Future<bool> isFriend(String uid) async =>
+      (await _db
+              .collection('users')
+              .doc(_uid)
+              .collection('friends')
+              .doc(uid)
+              .get())
+          .exists;
 
   /// True if there is already a pending outgoing request to [toUid].
   Future<bool> hasPendingRequest(String toUid) async {
@@ -311,7 +339,7 @@ class FriendService {
         .collection('users')
         .doc(_uid)
         .collection('sent_requests')
-        .where('toUid',  isEqualTo: toUid)
+        .where('toUid', isEqualTo: toUid)
         .where('status', isEqualTo: 'pending')
         .limit(1)
         .get();
@@ -324,7 +352,7 @@ class FriendService {
         .collection('users')
         .doc(_uid)
         .collection('sent_requests')
-        .where('toUid',  isEqualTo: toUid)
+        .where('toUid', isEqualTo: toUid)
         .where('status', isEqualTo: 'pending')
         .limit(1)
         .get();
@@ -357,7 +385,9 @@ class FriendService {
   /// Writes a system message to the shared DM thread when a
   /// friend request is accepted. Fire-and-forget (non-blocking).
   void _sendFriendAcceptedMessage(
-      FriendRequestModel req, Map<String, dynamic> myData) async {
+    FriendRequestModel req,
+    Map<String, dynamic> myData,
+  ) async {
     try {
       final ids = [_uid, req.fromUid]..sort();
       final tid = '${ids[0]}_${ids[1]}';
@@ -365,24 +395,20 @@ class FriendService {
       // Ensure thread document exists with participants
       await _db.collection('dm_threads').doc(tid).set({
         'participants': ids,
-        'threadId':     tid,
-        'createdAt':    FieldValue.serverTimestamp(),
+        'threadId': tid,
+        'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      await _db
-          .collection('dm_threads')
-          .doc(tid)
-          .collection('messages')
-          .add({
-        'senderId':   'system',
+      await _db.collection('dm_threads').doc(tid).collection('messages').add({
+        'senderId': 'system',
         'senderName': 'System',
-        'text':       '🎉 You are now friends! Say hello 👋',
-        'timestamp':  FieldValue.serverTimestamp(),
-        'isDeleted':  false,
-        'isSystem':   true,
-        'isEdited':   false,
-        'status':     'read',
-        'reactions':  <String, dynamic>{},
+        'text': '🎉 You are now friends! Say hello 👋',
+        'timestamp': FieldValue.serverTimestamp(),
+        'isDeleted': false,
+        'isSystem': true,
+        'isEdited': false,
+        'status': 'read',
+        'reactions': <String, dynamic>{},
       });
     } catch (_) {}
   }

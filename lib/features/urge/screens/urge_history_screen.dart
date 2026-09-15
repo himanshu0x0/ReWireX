@@ -1,12 +1,14 @@
-// lib/features/urge/screens/urge_history_screen.dart
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
-import '../services/urge_service.dart';
-import '../models/urge_model.dart';
-import '../data/urge_data.dart';
+import 'package:rewirex/features/urge/data/urge_needs.dart';
 
+import '../models/urge_session_model.dart';
+import '../services/urge_session_service.dart';
+
+/// History of complete Urge Rescue sessions.
+///
+/// This screen intentionally reads `urge_sessions` rather than the older
+/// `urge_logs` collection so the user can review the complete journey:
+/// urge -> need -> intervention -> recheck -> outcome.
 class UrgeHistoryScreen extends StatefulWidget {
   const UrgeHistoryScreen({super.key});
 
@@ -14,109 +16,498 @@ class UrgeHistoryScreen extends StatefulWidget {
   State<UrgeHistoryScreen> createState() => _UrgeHistoryScreenState();
 }
 
-class _UrgeHistoryScreenState extends State<UrgeHistoryScreen>
-    with SingleTickerProviderStateMixin {
-  final UrgeService _urgeService = UrgeService();
+class _UrgeHistoryScreenState extends State<UrgeHistoryScreen> {
+  final UrgeSessionService _sessionService = UrgeSessionService();
 
-  // ── Filter state ─────────────────────────────────────────────
-  String _filterEmotion = 'All';
-  String _filterIntensity = 'All'; // 'All' | 'Low' | 'Medium' | 'High'
-  int _filterDays = 30;
+  String _filter = 'All';
 
-  // ── Stats state ──────────────────────────────────────────────
-  UrgeStats? _stats;
-  bool _statsLoading = true;
-
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _fadeController = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 400));
-    _fadeAnim =
-        CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
-    _fadeController.forward();
-    _loadStats();
-  }
-
-  @override
-  void dispose() {
-    _fadeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadStats() async {
-    setState(() => _statsLoading = true);
-    try {
-      final stats = await _urgeService.getUrgeStats(days: _filterDays);
-      if (mounted) {
-        setState(() {
-        _stats = stats;
-        _statsLoading = false;
-      });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _statsLoading = false);
-    }
-  }
-
-  // ── Filter urges ─────────────────────────────────────────────
-  List<UrgeModel> _applyFilters(List<UrgeModel> urges) {
-    final cutoff = DateTime.now().subtract(Duration(days: _filterDays));
-    return urges.where((u) {
-      if (u.timestamp.isBefore(cutoff)) return false;
-      if (_filterEmotion != 'All' && u.emotion != _filterEmotion) {
-        return false;
-      }
-      if (_filterIntensity == 'Low' && u.intensity > 3) return false;
-      if (_filterIntensity == 'Medium' &&
-          (u.intensity < 4 || u.intensity > 6)) {
-        return false;
-      }
-      if (_filterIntensity == 'High' && u.intensity < 7) return false;
-      return true;
-    }).toList();
-  }
-
-  // ── Group urges by date ──────────────────────────────────────
-  Map<String, List<UrgeModel>> _groupByDate(List<UrgeModel> urges) {
-    final map = <String, List<UrgeModel>>{};
-    for (final u in urges) {
-      final key = _dateLabel(u.timestamp);
-      map.putIfAbsent(key, () => []).add(u);
-    }
-    return map;
-  }
-
-  String _dateLabel(DateTime dt) {
+  List<UrgeSessionModel> _filterSessions(
+    List<UrgeSessionModel> sessions,
+  ) {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final d = DateTime(dt.year, dt.month, dt.day);
-    if (d == today) return 'Today';
-    if (d == today.subtract(const Duration(days: 1))) return 'Yesterday';
-    return DateFormat('EEEE, MMM d').format(dt);
+
+    switch (_filter) {
+      case 'Helpful':
+        return sessions.where((session) {
+          return session.outcome == UrgeOutcome.resolved ||
+              session.outcome == UrgeOutcome.reduced;
+        }).toList();
+      case 'High':
+        return sessions.where((session) {
+          return (session.urgeBefore ?? 0) >= 7;
+        }).toList();
+      case 'Today':
+        return sessions.where((session) {
+          final date = session.startedAt;
+          return date.year == now.year &&
+              date.month == now.month &&
+              date.day == now.day;
+        }).toList();
+      case '7 days':
+        final cutoff = now.subtract(const Duration(days: 7));
+        return sessions
+            .where((session) => session.startedAt.isAfter(cutoff))
+            .toList();
+      default:
+        return sessions;
+    }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  BUILD
-  // ─────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
-      body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnim,
+      appBar: AppBar(
+        title: const Text('Rescue History'),
+        centerTitle: true,
+      ),
+      body: StreamBuilder<List<UrgeSessionModel>>(
+        stream: _sessionService.watchRecentSessions(limit: 100),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return _ErrorState(
+              message: 'Could not load rescue history.',
+              onRetry: () => setState(() {}),
+            );
+          }
+
+          final allSessions = snapshot.data ?? const <UrgeSessionModel>[];
+          final sessions = _filterSessions(allSessions);
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() {});
+              await Future<void>.delayed(const Duration(milliseconds: 250));
+            },
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+              children: [
+                Text(
+                  'Learn what helps when an urge arrives.',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Your rescue history shows the urge level before and after an intervention, so patterns can guide future choices.',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (allSessions.isNotEmpty) ...[
+                  _StatsCard(sessions: allSessions),
+                  const SizedBox(height: 18),
+                ],
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: const [
+                      'All',
+                      'Helpful',
+                      'High',
+                      'Today',
+                      '7 days',
+                    ].map(_HistoryFilterChip.new).toList(),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (sessions.isEmpty)
+                  _EmptyState(filter: _filter)
+                else
+                  ...sessions.map(
+                    (session) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _SessionTile(
+                        session: session,
+                        onDelete: () => _delete(context, session),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _delete(
+    BuildContext context,
+    UrgeSessionModel session,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete rescue session?'),
+        content: const Text(
+          'This removes this rescue session from history. It does not change your urge log, streak, or relapse history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _sessionService.deleteSession(session.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rescue session deleted.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete rescue session: $e')),
+      );
+    }
+  }
+}
+
+class _HistoryFilterChip extends StatelessWidget {
+  final String value;
+
+  const _HistoryFilterChip(this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context
+        .findAncestorStateOfType<_UrgeHistoryScreenState>();
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(value),
+        selected: state?._filter == value,
+        onSelected: (_) {
+          if (state == null) return;
+          // ignore: invalid_use_of_protected_member
+          state.setState(() => state._filter = value);
+        },
+      ),
+    );
+  }
+}
+
+class _StatsCard extends StatelessWidget {
+  final List<UrgeSessionModel> sessions;
+
+  const _StatsCard({required this.sessions});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final completed = sessions.where((session) {
+      return session.status == UrgeSessionStatus.completed ||
+          session.status == UrgeSessionStatus.escalated;
+    }).length;
+
+    final helpful = sessions.where((session) {
+      return session.outcome == UrgeOutcome.resolved ||
+          session.outcome == UrgeOutcome.reduced;
+    }).length;
+
+    final resolved = sessions.where(
+      (session) => session.outcome == UrgeOutcome.resolved,
+    ).length;
+
+    final rate = completed == 0 ? 0 : (helpful / completed * 100).round();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'YOUR RESCUE PATTERN',
+              style: TextStyle(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatItem(
+                    value: '${sessions.length}',
+                    label: 'Sessions',
+                  ),
+                ),
+                Expanded(
+                  child: _StatItem(
+                    value: '$completed',
+                    label: 'Completed',
+                  ),
+                ),
+                Expanded(
+                  child: _StatItem(
+                    value: '$rate%',
+                    label: 'Helpful',
+                  ),
+                ),
+                Expanded(
+                  child: _StatItem(
+                    value: '$resolved',
+                    label: 'Resolved',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String value;
+  final String label;
+
+  const _StatItem({
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        Text(
+          value,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SessionTile extends StatelessWidget {
+  final UrgeSessionModel session;
+  final VoidCallback onDelete;
+
+  const _SessionTile({
+    required this.session,
+    required this.onDelete,
+  });
+
+  Color get intensityColor {
+    final intensity = session.urgeBefore ?? 0;
+
+    if (intensity <= 3) return const Color(0xFF00C853);
+    if (intensity <= 5) return const Color(0xFFFFD600);
+    if (intensity <= 7) return const Color(0xFFFF6D00);
+    return const Color(0xFFE53935);
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/${date.year} '
+        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _urgeLabel(String value) {
+    final text = value
+        .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}')
+        .replaceAll('_', ' ');
+
+    if (text.isEmpty) return 'Unknown urge';
+    return text[0].toUpperCase() + text.substring(1);
+  }
+
+  Color _outcomeColor(BuildContext context) {
+    switch (session.outcome) {
+      case UrgeOutcome.resolved:
+        return const Color(0xFF00C853);
+      case UrgeOutcome.reduced:
+        return const Color(0xFF64DD17);
+      case UrgeOutcome.unchanged:
+        return const Color(0xFFFFD600);
+      case UrgeOutcome.stronger:
+        return const Color(0xFFFF6D00);
+      case UrgeOutcome.escalated:
+        return const Color(0xFFE53935);
+      case UrgeOutcome.unknown:
+        return Theme.of(context).colorScheme.onSurfaceVariant;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final before = session.urgeBefore;
+    final after = session.urgeAfter;
+    final color = intensityColor;
+    final outcomeColor = _outcomeColor(context);
+
+    return Card(
+      child: InkWell(
+        onLongPress: onDelete,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(),
-              _buildStatsRow(),
-              _buildFilterBar(),
-              const SizedBox(height: 4),
-              Expanded(child: _buildUrgeList()),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: color.withOpacity(0.12),
+                    child: Icon(Icons.shield_outlined, color: color),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _urgeLabel(session.urgeType.name),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDate(session.startedAt),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'delete') onDelete();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  _ScorePill(
+                    label: 'Before',
+                    value: before == null ? '—' : '$before/10',
+                    color: color,
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  _ScorePill(
+                    label: 'After',
+                    value: after == null ? '—' : '$after/10',
+                    color: outcomeColor,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (session.emotion.trim().isNotEmpty)
+                    _Tag(
+                      icon: Icons.mood_outlined,
+                      text: session.emotion,
+                    ),
+                  if (session.selectedNeed != null)
+                    _Tag(
+                      icon: Icons.favorite_outline_rounded,
+                      text: session.selectedNeed!.title,
+                    ),
+                  if (session.interventionTitle != null &&
+                      session.interventionTitle!.trim().isNotEmpty)
+                    _Tag(
+                      icon: Icons.auto_awesome_outlined,
+                      text: session.interventionTitle!,
+                    ),
+                ],
+              ),
+              if (session.trigger.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Trigger: ${session.trigger}',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: outcomeColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      session.outcome.label,
+                      style: TextStyle(
+                        color: outcomeColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (session.duration != null)
+                    Text(
+                      _durationLabel(session.duration!),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -124,786 +515,173 @@ class _UrgeHistoryScreenState extends State<UrgeHistoryScreen>
     );
   }
 
-  // ── Header ───────────────────────────────────────────────────
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.07),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(Icons.arrow_back_ios_new_rounded,
-                  size: 15, color: Colors.white.withOpacity(0.7)),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Urge History',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                Text(
-                  'Last $_filterDays days',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Time range selector
-          _TimeRangeChip(
-            selected: _filterDays,
-            onChanged: (v) {
-              setState(() => _filterDays = v);
-              _loadStats();
-            },
-          ),
-        ],
+  String _durationLabel(Duration duration) {
+    if (duration.inSeconds < 60) return '${duration.inSeconds}s';
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return seconds == 0 ? '${minutes}m' : '${minutes}m ${seconds}s';
+  }
+}
+
+class _ScorePill extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _ScorePill({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
       ),
-    );
-  }
-
-  // ── Stats row ─────────────────────────────────────────────────
-  Widget _buildStatsRow() {
-    if (_statsLoading) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(24, 16, 24, 0),
-        child: SizedBox(
-          height: 90,
-          child: Center(
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Color(0xFF6C63FF),
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_stats == null || _stats!.totalUrges == 0) {
-      return const SizedBox(height: 8);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StatCard(
-            label: 'Total Urges',
-            value: '${_stats!.totalUrges}',
-            icon: Icons.flash_on_rounded,
-            color: const Color(0xFF6C63FF),
-          ),
-          const SizedBox(width: 10),
-          _StatCard(
-            label: 'Avg Intensity',
-            value: _stats!.avgIntensity.toStringAsFixed(1),
-            icon: Icons.bar_chart_rounded,
-            color: _intensityColor(_stats!.avgIntensity),
-          ),
-          const SizedBox(width: 10),
-          _StatCard(
-            label: 'High Risk',
-            value: '${_stats!.highIntensityCount}',
-            icon: Icons.warning_amber_rounded,
-            color: const Color(0xFFE53935),
-          ),
-          const SizedBox(width: 10),
-          _StatCard(
-            label: 'Peak Hour',
-            value: _formatHour(_stats!.peakHour),
-            icon: Icons.access_time_rounded,
-            color: const Color(0xFF00C4A0),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _intensityColor(double v) {
-    if (v <= 3) return const Color(0xFF00C853);
-    if (v <= 5) return const Color(0xFFFFD600);
-    if (v <= 7) return const Color(0xFFFF6D00);
-    return const Color(0xFFE53935);
-  }
-
-  String _formatHour(int h) {
-    if (h == 0) return '12am';
-    if (h < 12) return '${h}am';
-    if (h == 12) return '12pm';
-    return '${h - 12}pm';
-  }
-
-  // ── Filter bar ───────────────────────────────────────────────
-  Widget _buildFilterBar() {
-    final uniqueEmotions = ['All', ...allEmotions.map((e) => e.name)];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.only(left: 24),
-          child: Text(
-            'FILTER BY EMOTION',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.9,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 36,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            itemCount: uniqueEmotions.length,
-            itemBuilder: (context, i) {
-              final em = uniqueEmotions[i];
-              final isSelected = _filterEmotion == em;
-              final data = em == 'All'
-                  ? null
-                  : allEmotions
-                      .firstWhere((e) => e.name == em,
-                          orElse: () => const EmotionData(
-                              name: '', emoji: '', colorValue: 0xFF607D8B))
-                  ;
-              final col = data != null
-                  ? Color(data.colorValue)
-                  : const Color(0xFF6C63FF);
-
-              return GestureDetector(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  setState(() => _filterEmotion = em);
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.only(right: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    color: isSelected
-                        ? col.withOpacity(0.2)
-                        : Colors.white.withOpacity(0.06),
-                    border: Border.all(
-                      color: isSelected
-                          ? col
-                          : Colors.transparent,
-                      width: 1.3,
-                    ),
-                  ),
-                  child: Text(
-                    em == 'All'
-                        ? 'All'
-                        : '${data?.emoji ?? ''}  $em',
-                    style: TextStyle(
-                      color: isSelected
-                          ? col
-                          : Colors.white.withOpacity(0.5),
-                      fontSize: 12,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 10),
-        // Intensity quick filters
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            children: ['All', 'Low', 'Medium', 'High'].map((label) {
-              final isSelected = _filterIntensity == label;
-              final col = label == 'Low'
-                  ? const Color(0xFF00C853)
-                  : label == 'Medium'
-                      ? const Color(0xFFFF6D00)
-                      : label == 'High'
-                          ? const Color(0xFFE53935)
-                          : const Color(0xFF6C63FF);
-              return GestureDetector(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  setState(() => _filterIntensity = label);
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.only(right: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: isSelected
-                        ? col.withOpacity(0.18)
-                        : Colors.white.withOpacity(0.05),
-                    border: Border.all(
-                      color: isSelected
-                          ? col.withOpacity(0.6)
-                          : Colors.white.withOpacity(0.08),
-                    ),
-                  ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: isSelected
-                          ? col
-                          : Colors.white.withOpacity(0.45),
-                      fontSize: 12,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Main list ────────────────────────────────────────────────
-  Widget _buildUrgeList() {
-    return StreamBuilder<List<UrgeModel>>(
-      stream: _urgeService.getUrges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return const Center(
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Color(0xFF6C63FF),
-            ),
-          );
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Something went wrong',
-              style: TextStyle(color: Colors.white.withOpacity(0.4)),
-            ),
-          );
-        }
-
-        final allUrges = snapshot.data ?? [];
-        final filtered = _applyFilters(allUrges);
-
-        if (filtered.isEmpty) {
-          return _buildEmpty(allUrges.isEmpty);
-        }
-
-        final grouped = _groupByDate(filtered);
-        final dateKeys = grouped.keys.toList();
-
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-          itemCount: dateKeys.length,
-          itemBuilder: (context, di) {
-            final dateKey = dateKeys[di];
-            final dayUrges = grouped[dateKey]!;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDateHeader(dateKey, dayUrges),
-                const SizedBox(height: 8),
-                ...dayUrges.asMap().entries.map((entry) {
-                  return _UrgeCard(
-                    urge: entry.value,
-                    onDelete: () => _confirmDelete(entry.value),
-                  );
-                }),
-                const SizedBox(height: 16),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildDateHeader(String label, List<UrgeModel> dayUrges) {
-    final avgInt =
-        dayUrges.map((u) => u.intensity).reduce((a, b) => a + b) /
-            dayUrges.length;
-    final color = _intensityColor(avgInt);
-    return Row(
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.4),
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.9,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            '${dayUrges.length} urge${dayUrges.length != 1 ? 's' : ''}',
+          Text(
+            label,
             style: TextStyle(
               color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmpty(bool noData) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            noData
-                ? Icons.assignment_outlined
-                : Icons.filter_list_off_rounded,
-            size: 48,
-            color: Colors.white.withOpacity(0.12),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 1),
           Text(
-            noData ? 'No urges logged yet' : 'No results for this filter',
+            value,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            noData
-                ? 'Your urge history will appear here'
-                : 'Try changing your filter options',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.2),
+              color: color,
               fontSize: 13,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  // ── Delete ───────────────────────────────────────────────────
-  Future<void> _confirmDelete(UrgeModel urge) async {
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: const Color(0xFF13131F),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+class _Tag extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _Tag({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 260),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
       ),
-      builder: (_) => Padding(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final String filter;
+
+  const _EmptyState({required this.filter});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          children: [
+            const Icon(Icons.history_toggle_off_rounded, size: 52),
+            const SizedBox(height: 12),
+            Text(
+              'No rescue sessions in this view',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              filter == 'All'
+                  ? 'Completed rescue journeys will appear here.'
+                  : 'Try another filter.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorState({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Delete this urge log?',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
+            const Icon(Icons.cloud_off_rounded, size: 48),
+            const SizedBox(height: 12),
             Text(
-              'This action cannot be undone.',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
-                fontSize: 13,
-              ),
+              message,
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context, false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.07),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context, true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE53935).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                            color: const Color(0xFFE53935).withOpacity(0.4)),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text(
-                        'Delete',
-                        style: TextStyle(
-                          color: Color(0xFFE53935),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      await _urgeService.deleteUrge(urge.id);
-      _loadStats();
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-//  URGE CARD
-// ─────────────────────────────────────────────────────────────
-class _UrgeCard extends StatelessWidget {
-  final UrgeModel urge;
-  final VoidCallback onDelete;
-
-  const _UrgeCard({required this.urge, required this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    final emotion = emotionByName(urge.emotion);
-    final intensityColor = Color(urge.intensityColorValue);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onLongPress: onDelete,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Row 1: type + time
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        urge.type,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Text(
-                      DateFormat('HH:mm').format(urge.timestamp),
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.35),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Row 2: chips
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    // Emotion
-                    _Chip(
-                      label: '${emotion.emoji}  ${urge.emotion}',
-                      color: Color(emotion.colorValue),
-                    ),
-                    // Intensity
-                    _Chip(
-                      label: '${urge.intensityLabel}  ${urge.intensity}/10',
-                      color: intensityColor,
-                    ),
-                    // Trigger
-                    if (urge.trigger.isNotEmpty)
-                      _Chip(
-                        label: urge.trigger,
-                        color: Colors.white.withOpacity(0.3),
-                        subtle: true,
-                      ),
-                    // Context
-                    if (urge.context.isNotEmpty)
-                      _Chip(
-                        label: urge.context,
-                        color: Colors.white.withOpacity(0.2),
-                        subtle: true,
-                      ),
-                    // Body location
-                    if (urge.bodyLocation.isNotEmpty)
-                      _Chip(
-                        label: urge.bodyLocation,
-                        color: const Color(0xFF6C63FF).withOpacity(0.6),
-                        subtle: true,
-                      ),
-                  ],
-                ),
-                // Notes
-                if (urge.notes.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.04),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.format_quote_rounded,
-                            size: 14,
-                            color: Colors.white.withOpacity(0.25)),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            urge.notes,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12.5,
-                              fontStyle: FontStyle.italic,
-                              height: 1.4,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                // Long-press hint
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Hold to delete',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.15),
-                      fontSize: 10.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final Color color;
-  final bool subtle;
-
-  const _Chip({
-    required this.label,
-    required this.color,
-    this.subtle = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: subtle
-            ? Colors.white.withOpacity(0.05)
-            : color.withOpacity(0.15),
-        border: Border.all(
-          color: subtle
-              ? Colors.white.withOpacity(0.08)
-              : color.withOpacity(0.35),
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: subtle ? Colors.white.withOpacity(0.45) : color,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(14),
-          border:
-              Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.35),
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-              overflow: TextOverflow.ellipsis,
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: onRetry,
+              child: const Text('Retry'),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _TimeRangeChip extends StatelessWidget {
-  final int selected;
-  final ValueChanged<int> onChanged;
-
-  const _TimeRangeChip(
-      {required this.selected, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [7, 30, 90].map((days) {
-        final isSelected = selected == days;
-        return GestureDetector(
-          onTap: () => onChanged(days),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.only(left: 6),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              color: isSelected
-                  ? const Color(0xFF6C63FF).withOpacity(0.2)
-                  : Colors.white.withOpacity(0.05),
-              border: Border.all(
-                color: isSelected
-                    ? const Color(0xFF6C63FF).withOpacity(0.5)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Text(
-              '${days}d',
-              style: TextStyle(
-                color: isSelected
-                    ? const Color(0xFF6C63FF)
-                    : Colors.white.withOpacity(0.35),
-                fontSize: 11.5,
-                fontWeight: isSelected
-                    ? FontWeight.w700
-                    : FontWeight.w500,
-              ),
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 }

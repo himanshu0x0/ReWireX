@@ -3,6 +3,7 @@
 // ============================================================
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math' as math;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/room_model.dart';
 
@@ -28,12 +29,47 @@ class RoomService {
       .map((s) => s.docs.map((d) => RoomModel.fromMap(d.id, d.data())).toList());
 
   Future<void> joinRoom(String roomId, String name) async {
-    await _db.collection('chat_rooms').doc(roomId).update({'onlineCount': FieldValue.increment(1)});
+    final roomRef = _db.collection('chat_rooms').doc(roomId);
+    final memberRef = roomRef.collection('room_members').doc(_uid);
+
+    await _db.runTransaction((tx) async {
+      final member = await tx.get(memberRef);
+      tx.set(memberRef, {
+        'uid': _uid,
+        'anonName': name,
+        'isOnline': true,
+        'lastSeenAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      if (!member.exists || member.data()?['isOnline'] != true) {
+        tx.update(roomRef, {'onlineCount': FieldValue.increment(1)});
+      }
+    });
     await _sys(roomId, '$name joined the room 👋');
   }
 
-  Future<void> leaveRoom(String roomId) async =>
-      _db.collection('chat_rooms').doc(roomId).update({'onlineCount': FieldValue.increment(-1)});
+  Future<void> heartbeatRoom(String roomId, String name) async {
+    await _db.collection('chat_rooms').doc(roomId)
+        .collection('room_members').doc(_uid).set({
+      'uid': _uid,
+      'anonName': name,
+      'isOnline': true,
+      'lastSeenAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> leaveRoom(String roomId) async {
+    final roomRef = _db.collection('chat_rooms').doc(roomId);
+    final memberRef = roomRef.collection('room_members').doc(_uid);
+    await _db.runTransaction((tx) async {
+      // Firestore transactions require reads before writes.
+      final member = await tx.get(memberRef);
+      final room = await tx.get(roomRef);
+      if (!member.exists) return;
+      tx.delete(memberRef);
+      final count = (room.data()?['onlineCount'] as num?)?.toInt() ?? 0;
+      tx.update(roomRef, {'onlineCount': math.max(0, count - 1)});
+    });
+  }
 
   Future<void> sendMessage(String roomId, String name, String text) async {
     if (text.trim().isEmpty) return;

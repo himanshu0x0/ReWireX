@@ -3,6 +3,7 @@
 // ============================================================
 
 import 'dart:async';
+import '../services/presence_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -31,7 +32,7 @@ class DmScreen extends StatefulWidget {
   State<DmScreen> createState() => _DmScreenState();
 }
 
-class _DmScreenState extends State<DmScreen> with WidgetsBindingObserver {
+class _DmScreenState extends State<DmScreen> {
   final DmService             _svc    = DmService();
   final FriendService         _fsvc   = FriendService();
   final TextEditingController _ctrl   = TextEditingController();
@@ -43,32 +44,19 @@ class _DmScreenState extends State<DmScreen> with WidgetsBindingObserver {
   bool   _sending   = false;
   Timer? _typingTimer;
   bool   _isTyping  = false;
+  bool   _readInFlight = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
+    PresenceService.instance.start();
     _svc.markDelivered(widget.otherUid);
-    _svc.markAsRead(widget.otherUid);
-    _fsvc.setOnline(true);
     _ctrl.addListener(_onTextChanged);
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      _svc.setTyping(widget.otherUid, false);
-      _fsvc.setOnline(false);
-    } else if (state == AppLifecycleState.resumed) {
-      _fsvc.setOnline(true);
-      _svc.markAsRead(widget.otherUid);
-    }
-  }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _typingTimer?.cancel();
     _svc.setTyping(widget.otherUid, false);
     _ctrl.removeListener(_onTextChanged);
@@ -303,8 +291,18 @@ class _DmScreenState extends State<DmScreen> with WidgetsBindingObserver {
         ]));
       }
 
-      WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _svc.markAsRead(widget.otherUid));
+      // Mark only currently unread incoming messages. The guard prevents the
+      // snapshot -> write -> snapshot feedback loop that kept unread badges alive.
+      final hasUnreadIncoming = msgs.any((m) =>
+          m.senderId == widget.otherUid &&
+          (m.status == MessageStatus.sent || m.status == MessageStatus.delivered));
+      if (hasUnreadIncoming && !_readInFlight) {
+        _readInFlight = true;
+        _svc.markAsRead(widget.otherUid).whenComplete(() {
+          _readInFlight = false;
+        });
+      }
+
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollBottom());
 
       return ListView.builder(

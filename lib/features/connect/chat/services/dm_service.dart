@@ -85,6 +85,7 @@ class DmService {
         lastMessage:      preview,
         lastSenderId:     _uid,
         incrementUnread:  false,
+        lastMsgId:        msgRef.id,
       ),
       _updateInboxEntry(
         forUid:           otherUid,
@@ -95,6 +96,7 @@ class DmService {
         lastMessage:      preview,
         lastSenderId:     _uid,
         incrementUnread:  true,
+        lastMsgId:        msgRef.id,
       ),
     ]);
   }
@@ -146,6 +148,8 @@ class DmService {
           .map((d) => DmMessageModel.fromMap(d.id, d.data()))
           .toList());
 
+  /// Messages tab contains ONLY conversations with unread incoming messages.
+  /// The Friends tab is the source of truth for the complete accepted-friends list.
   Stream<List<DmThreadModel>> inboxStream() => _db
       .collection('users')
       .doc(_uid)
@@ -154,6 +158,7 @@ class DmService {
       .snapshots()
       .map((s) => s.docs
           .map((d) => DmThreadModel.fromMap(d.data()))
+          .where((t) => t.unreadCount > 0 && t.lastSenderId != _uid)
           .toList());
 
   Stream<int> totalUnreadStream() => _db
@@ -173,17 +178,17 @@ class DmService {
   Future<void> markAsRead(String otherUid) async {
     final tid = threadId(otherUid);
 
-    // Reset unread counter in inbox index
+    // Reset the per-user inbox counter. This is intentionally idempotent.
     try {
       await _db
           .collection('users')
           .doc(_uid)
           .collection('dm_threads')
           .doc(tid)
-          .update({'unreadCount': 0});
+          .set({'unreadCount': 0}, SetOptions(merge: true));
     } catch (_) {}
 
-    // Batch-update unread messages → read
+    // Update only messages sent by the other participant.
     try {
       final unread = await _db
           .collection('dm_threads')
@@ -308,15 +313,13 @@ class DmService {
     required String   lastMessage,
     required String   lastSenderId,
     required bool     incrementUnread,
+    String?            lastMsgId,
   }) async {
     final ref = _db
         .collection('users')
         .doc(forUid)
         .collection('dm_threads')
         .doc(threadId(otherUid));
-
-    final cur =
-        ((await ref.get()).data()?['unreadCount'] as num?)?.toInt() ?? 0;
 
     await ref.set({
       'threadId':         threadId(otherUid),
@@ -327,7 +330,9 @@ class DmService {
       'lastMessage':      lastMessage,
       'lastMessageAt':    FieldValue.serverTimestamp(),
       'lastSenderId':     lastSenderId,
-      'unreadCount':      incrementUnread ? cur + 1 : cur,
+      if (lastMsgId != null) 'lastMsgId': lastMsgId,
+      // Atomic increment fixes lost-unread-count races when messages arrive quickly.
+      'unreadCount':      FieldValue.increment(incrementUnread ? 1 : 0),
     }, SetOptions(merge: true));
   }
 }

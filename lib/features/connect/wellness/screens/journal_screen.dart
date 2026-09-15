@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class JournalScreen extends StatefulWidget {
-  const JournalScreen({super.key});
+  const JournalScreen({super.key, this.returnAfterSave = false});
+
+  final bool returnAfterSave;
   @override State<JournalScreen> createState() => _JournalState();
 }
  
@@ -29,6 +31,10 @@ class _JournalState extends State<JournalScreen> {
       _ctrl.clear();
     });
     FocusScope.of(context).unfocus();
+
+    if (widget.returnAfterSave && mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
  
   @override

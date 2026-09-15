@@ -51,6 +51,31 @@ class StoryCard extends StatelessWidget {
               style: TextStyle(
                   color: Colors.white.withOpacity(0.4),
                   fontSize: 12)),
+          if (story.isFeatured && story.sourceName != null) ...[
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                const Icon(
+                  Icons.verified_rounded,
+                  size: 13,
+                  color: Color(0xFF00C4A0),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Verified source • ${story.sourceName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF00C4A0),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
           Text(story.content, maxLines: 2,
               overflow: TextOverflow.ellipsis,

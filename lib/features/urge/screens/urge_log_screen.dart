@@ -2,11 +2,15 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:rewirex/features/intervention/screens/intevention_screen.dart';
+import 'package:rewirex/features/urge/screens/urge_solution_screen.dart';
 import 'package:rewirex/features/urge/services/urge_service.dart';
-import 'package:rewirex/features/streak/services/streak_service.dart';
-import 'package:rewirex/features/risk/services/risk_prediction_service.dart';
 import 'package:rewirex/features/urge/data/urge_data.dart';
+import 'package:rewirex/features/urge/data/urge_needs.dart';
+import 'package:rewirex/features/urge/engine/urge_classifier.dart';
+import 'package:rewirex/features/urge/engine/urge_engine.dart';
+import 'package:rewirex/features/urge/models/urge_session_model.dart';
+import 'package:rewirex/features/urge/services/urge_session_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class UrgeLogScreen extends StatefulWidget {
   const UrgeLogScreen({super.key});
@@ -19,7 +23,9 @@ class _UrgeLogScreenState extends State<UrgeLogScreen>
     with TickerProviderStateMixin {
   // ── Services ─────────────────────────────────────────────────
   final UrgeService _urgeService = UrgeService();
-  final StreakService _streakService = StreakService();
+  final UrgeSessionService _urgeSessionService = UrgeSessionService();
+  final UrgeClassifier _urgeClassifier = const UrgeClassifier();
+  final UrgeEngine _urgeEngine = const UrgeEngine();
 
   // ── Step state ───────────────────────────────────────────────
   int _currentStep = 0;
@@ -109,65 +115,164 @@ class _UrgeLogScreenState extends State<UrgeLogScreen>
     }
   }
 
-  // ── Save logic (preserved from original) ────────────────────
+  // ── Save + start the unified urge rescue flow ───────────────
   Future<void> _saveUrge() async {
     if (_isSaving) return;
+
     setState(() => _isSaving = true);
 
+    String stage = 'Starting';
+
     try {
+      // Keep this an integer because both the old urge log and the new
+      // rescue session expect the initial urge score as an int.
+      final int intensityInt = _intensity.round().clamp(1, 10).toInt();
+
+      // ─────────────────────────────────────────────────────────
+      // STAGE 1 — Save the original urge log
+      // ─────────────────────────────────────────────────────────
+      stage = 'Saving urge log';
+      debugPrint('URGE RESCUE → Stage 1: saving urge log');
+
       await _urgeService.saveUrge(
-        type: _selectedType,
-        intensity: _intensity.toInt(),
-        emotion: _selectedEmotion,
-        trigger: _selectedTrigger,
+        type: _selectedType.trim(),
+        intensity: intensityInt,
+        emotion: _selectedEmotion.trim(),
+        trigger: _selectedTrigger.trim(),
         notes: _notesController.text.trim(),
-        context: _selectedContext,
-        bodyLocation: _selectedBodyLocation,
+        context: _selectedContext.trim(),
+        bodyLocation: _selectedBodyLocation.trim(),
       );
 
-      // ── Auto-relapse logic (preserved exactly) ───────────────
-      final riskService = RiskPredictionService();
-      final risk = await riskService.analyzeRisk();
-      bool shouldRelapse = false;
-      final int intensityInt = _intensity.toInt();
+      debugPrint('URGE RESCUE → Stage 1 SUCCESS');
 
-      if (intensityInt >= 9) {
-        shouldRelapse = true;
-      } else if (risk != null && risk.level == 'High' && intensityInt >= 7) {
-        shouldRelapse = true;
-      } else if (_selectedEmotion == 'Lonely' && intensityInt >= 7) {
-        shouldRelapse = true;
+      // ─────────────────────────────────────────────────────────
+      // STAGE 2 — Verify authentication
+      // ─────────────────────────────────────────────────────────
+      stage = 'Checking authentication';
+      final user = FirebaseAuth.instance.currentUser;
+
+      debugPrint('URGE RESCUE → Stage 2: uid=${user?.uid}');
+
+      if (user == null) {
+        throw StateError('User is not authenticated.');
       }
 
-      if (shouldRelapse) {
-        await _streakService.recordRelapse();
-      }
+      debugPrint('URGE RESCUE → Stage 2 SUCCESS');
+
+      // ─────────────────────────────────────────────────────────
+      // STAGE 3 — Classify the selected urge
+      // ─────────────────────────────────────────────────────────
+      stage = 'Classifying urge';
+
+      final classification = _urgeClassifier.classify(_selectedType.trim());
+      final urgeType = classification.type;
+
+      debugPrint(
+        'URGE RESCUE → Stage 3 SUCCESS: '
+        'selectedType=$_selectedType, '
+        'urgeType=${urgeType.name}',
+      );
+
+      // ─────────────────────────────────────────────────────────
+      // STAGE 4 — Build the rescue session
+      // ─────────────────────────────────────────────────────────
+      stage = 'Creating urge session';
+
+      final now = DateTime.now();
+
+      final started = UrgeSessionModel.start(
+        id: '${user.uid}_${now.microsecondsSinceEpoch}',
+        userId: user.uid,
+        urgeType: urgeType,
+        emotion: _selectedEmotion.trim(),
+        trigger: _selectedTrigger.trim(),
+        context: _selectedContext.trim(),
+        bodyLocation: _selectedBodyLocation.trim(),
+        urgeBefore: intensityInt,
+        suggestedNeeds: needsForUrge(urgeType),
+        startedAt: now,
+      ).copyWith(
+        notes: _notesController.text.trim(),
+        updatedAt: now,
+      );
+
+      debugPrint(
+        'URGE RESCUE → Stage 4 SUCCESS: sessionId=${started.id}',
+      );
+
+      // ─────────────────────────────────────────────────────────
+      // STAGE 5 — Run the deterministic rescue engine
+      // ─────────────────────────────────────────────────────────
+      stage = 'Preparing rescue recommendation';
+
+      final prepared = _urgeEngine.prepareSession(started);
+
+      debugPrint(
+        'URGE RESCUE → Stage 5 SUCCESS: '
+        'need=${prepared.selectedNeed?.name}, '
+        'intervention=${prepared.interventionId}, '
+        'path=${prepared.rescuePath.name}',
+      );
+
+      // ─────────────────────────────────────────────────────────
+      // STAGE 6 — Persist the rescue session
+      // ─────────────────────────────────────────────────────────
+      stage = 'Saving rescue session';
+
+      await _urgeSessionService.createSession(prepared);
+
+      debugPrint('URGE RESCUE → Stage 6 SUCCESS');
+
+      // ─────────────────────────────────────────────────────────
+      // STAGE 7 — Open the one-solution screen
+      // ─────────────────────────────────────────────────────────
+      stage = 'Opening solution screen';
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
+      Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => InterventionScreen(
-            emotion: _selectedEmotion,
-            intensity: intensityInt,
+          builder: (_) => UrgeSolutionScreen(session: prepared),
+        ),
+      );
+
+      debugPrint('URGE RESCUE → COMPLETE');
+    } catch (e, stackTrace) {
+      // Do not hide the real error. This is intentionally detailed while
+      // we diagnose the rescue flow. The user-facing snackbar also shows
+      // the exact stage and exception instead of the generic message.
+      debugPrint('');
+      debugPrint('════════════════════════════════════════');
+      debugPrint('URGE RESCUE FAILED');
+      debugPrint('FAILED STAGE: $stage');
+      debugPrint('ERROR TYPE: ${e.runtimeType}');
+      debugPrint('ERROR: $e');
+      debugPrint('════════════════════════════════════════');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed at: $stage\n$e',
+            maxLines: 5,
+            overflow: TextOverflow.ellipsis,
+          ),
+          backgroundColor: const Color(0xFFE53935),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
       );
-    } catch (e) {
-      debugPrint('Urge Save Error: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Something went wrong. Please try again.'),
-          backgroundColor: const Color(0xFFE53935),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
     } finally {
-      if (mounted) setState(() => _isSaving = false);
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 

@@ -136,11 +136,13 @@ class _LogMissedDaysScreenState extends State<LogMissedDaysScreen>
       setState(() { for (final e in _entries) { e.status = DayStatus.pending; } });
 
   Future<void> _saveAndDone() async {
-    final toLog = _entries.where((e) => e.status != DayStatus.pending).toList();
+    final toLog = _entries
+        .where((e) => !e.isToday && e.status != DayStatus.pending)
+        .toList();
     if (toLog.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Text(
-          'Please mark at least one day first.',
+          'Select at least one completed day before today. Today is handled by Daily Check-In.',
           style: TextStyle(fontSize: 15), // was implicit ~14
         ),
         backgroundColor: Colors.orange,
@@ -167,11 +169,25 @@ class _LogMissedDaysScreenState extends State<LogMissedDaysScreen>
         }
         await batch.commit();
       }
-    } catch (_) {}
-    setState(() => _isSaving = false);
+    } catch (e) {
+      debugPrint('Save missed days error: $e');
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not save your history. Please try again.'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+      return;
+    }
+
     if (mounted) {
-      Navigator.pop(context,
-        {'successDays': _successCount, 'relapseDays': _relapseCount});
+      setState(() => _isSaving = false);
+      Navigator.pop(context, {
+        'successDays': _successCount,
+        'relapseDays': _relapseCount,
+      });
     }
   }
 
@@ -228,7 +244,7 @@ class _LogMissedDaysScreenState extends State<LogMissedDaysScreen>
                 fontSize: 20,        // was 18
                 fontWeight: FontWeight.w800,
               )),
-          Text('Last 14 days including today',
+          Text('Last 14 days • use Daily Check-In for today',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.38),
                 fontSize: 13,        // was 12

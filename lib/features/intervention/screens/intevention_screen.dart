@@ -11,15 +11,28 @@ import '../services/adaptive_intervention_service.dart';
 import '../services/intervention_feedback_service.dart';
 import '../models/intervention_feedback_model.dart';
 import '../../risk/services/risk_prediction_service.dart';
+import '../../urge/models/urge_session_model.dart';
+import '../../urge/services/urge_session_service.dart';
 
 class InterventionScreen extends StatefulWidget {
   final String emotion;
   final int intensity;
 
+  /// Optional intervention selected by the newer Urge Rescue Engine.
+  /// When provided, this screen executes that exact predefined intervention
+  /// instead of asking AdaptiveInterventionService to choose a new one.
+  final InterventionModel? interventionOverride;
+
+  /// Optional urge session to keep the new urge-session record synchronized
+  /// with the existing guided intervention experience.
+  final UrgeSessionModel? urgeSession;
+
   const InterventionScreen({
     super.key,
     required this.emotion,
     required this.intensity,
+    this.interventionOverride,
+    this.urgeSession,
   });
 
   @override
@@ -32,6 +45,7 @@ class _InterventionScreenState extends State<InterventionScreen>
   final AdaptiveInterventionService _service = AdaptiveInterventionService();
   final InterventionFeedbackService _feedbackService =
       InterventionFeedbackService();
+  final UrgeSessionService _urgeSessionService = UrgeSessionService();
 
   // ── State ──────────────────────────────────────────────────
   InterventionModel? _model;
@@ -105,6 +119,18 @@ class _InterventionScreenState extends State<InterventionScreen>
   // ("Selecting your technique…" never resolving). Now, any failure falls
   // back to a safe default technique instead of hanging the screen.
   Future<void> _loadIntervention() async {
+    // New urge flow: respect the intervention already selected by the
+    // UrgeEngine. This prevents the old emotion/intensity selector from
+    // silently replacing the user's rescue choice.
+    if (widget.interventionOverride != null) {
+      if (mounted) {
+        setState(() {
+          _model = widget.interventionOverride;
+        });
+      }
+      return;
+    }
+
     InterventionModel? model;
 
     try {
@@ -244,6 +270,8 @@ class _InterventionScreenState extends State<InterventionScreen>
         ),
       );
 
+      await _syncUrgeSessionAfterCompletion();
+
       if (mounted) Navigator.pop(context);
     } catch (e) {
       debugPrint('Feedback Save Error: $e');
@@ -264,6 +292,40 @@ class _InterventionScreenState extends State<InterventionScreen>
     }
   }
 
+  Future<void> _syncUrgeSessionAfterCompletion() async {
+  final urgeSession = widget.urgeSession;
+  if (urgeSession == null) return;
+
+  final int before =
+      (urgeSession.urgeBefore ?? widget.intensity).clamp(1, 10).toInt();
+
+  final int after =
+      (_intensityAfter ?? widget.intensity).clamp(0, 10).toInt();
+
+  final now = DateTime.now();
+
+  final updated = urgeSession.copyWith(
+    urgeBefore: before,
+    urgeAfter: after,
+    outcome: UrgeSessionModel.outcomeFromScores(
+      before,
+      after,
+    ),
+    status: UrgeSessionStatus.completed,
+    interventionCompleted: true,
+    interventionCompletedAt: now,
+    recheckedAt: now,
+    completedAt: now,
+    updatedAt: now,
+  );
+
+  try {
+    await _urgeSessionService.updateSession(updated);
+  } catch (e, stackTrace) {
+    debugPrint('Urge session sync error: $e');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+}
   // ══════════════════════════════════════════════════════════
   //  BUILD
   // ══════════════════════════════════════════════════════════
@@ -752,7 +814,9 @@ class _InterventionScreenState extends State<InterventionScreen>
                   ),
                 ),
                 Text(
-                  '${widget.emotion}  •  Intensity ${widget.intensity}/10',
+                  widget.urgeSession != null
+                      ? '${widget.urgeSession!.urgeType.name}  •  Intensity ${widget.intensity}/10'
+                      : '${widget.emotion}  •  Intensity ${widget.intensity}/10',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.38),
                     fontSize: 12,

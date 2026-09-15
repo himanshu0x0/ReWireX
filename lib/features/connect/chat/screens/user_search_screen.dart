@@ -80,7 +80,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
       if (!mounted) return;
       setState(() {
         _loading  = false;
-        _searched = true;
+        _searched = true;     
         _error    = 'Something went wrong. Please try again.';
       });
     }

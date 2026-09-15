@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:rewirex/features/connect/chat/rooms/models/room_model.dart';
@@ -16,15 +17,54 @@ class RoomScreen extends StatefulWidget {
   @override State<RoomScreen> createState() => _RoomState();
 }
 
-class _RoomState extends State<RoomScreen> {
+class _RoomState extends State<RoomScreen> with WidgetsBindingObserver {
   final RoomService           _svc    = RoomService();
   final TextEditingController _ctrl   = TextEditingController();
   final ScrollController      _scroll = ScrollController();
   final String _me = FirebaseAuth.instance.currentUser?.uid ?? '';
   bool _sending = false;
+  Timer? _presenceTimer;
+  bool _joined = false;
 
-  @override void initState() { super.initState(); _svc.joinRoom(widget.room.id, widget.anonName); }
-  @override void dispose()   { _svc.leaveRoom(widget.room.id); _ctrl.dispose(); _scroll.dispose(); super.dispose(); }
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _join();
+  }
+
+  Future<void> _join() async {
+    try {
+      await _svc.joinRoom(widget.room.id, widget.anonName);
+      _joined = true;
+      _presenceTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (_joined) _svc.heartbeatRoom(widget.room.id, widget.anonName);
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached || state == AppLifecycleState.hidden) {
+      if (_joined) {
+        _joined = false;
+        _svc.leaveRoom(widget.room.id);
+      }
+    } else if (state == AppLifecycleState.resumed && !_joined) {
+      _join();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _presenceTimer?.cancel();
+    if (_joined) _svc.leaveRoom(widget.room.id);
+    _ctrl.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
 
   Color get _cat => widget.room.category == RoomCategory.addiction
       ? const Color(0xFF6C63FF) : widget.room.category == RoomCategory.timeOfDay

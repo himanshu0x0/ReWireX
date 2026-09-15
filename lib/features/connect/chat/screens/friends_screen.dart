@@ -9,6 +9,7 @@ import '../models/friend_model.dart';
 import '../models/friend_request_model.dart';
 import '../services/dm_service.dart';
 import '../services/friend_service.dart';
+import '../services/presence_service.dart';
 import 'dm_screen.dart';
 import 'user_search_screen.dart';
 
@@ -28,6 +29,7 @@ class _FriendsScreenState extends State<FriendsScreen>
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
+    PresenceService.instance.start();
   }
 
   @override
@@ -139,38 +141,28 @@ class _FriendsScreenState extends State<FriendsScreen>
         return _empty(Icons.group_outlined, 'No friends yet',
             'Tap the search icon to find people');
       }
-      return StreamBuilder<List<DmThreadModel>>(
-        stream: _dsvc.inboxStream(),
-        builder: (_, iSnap) {
-          final unreadMap = <String, int>{};
-          for (final t in (iSnap.data ?? [])) {
-            unreadMap[t.otherUid] = t.unreadCount;
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-            itemCount: friends.length,
-            itemBuilder: (_, i) =>
-                _FriendTile(
-                  friend:       friends[i],
-                  unread:       unreadMap[friends[i].uid] ?? 0,
-                  fsvc:         _fsvc,
-                  onTap: () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => DmScreen(
-                        otherUid:         friends[i].uid,
-                        otherUsername:    friends[i].username,
-                        otherDisplayName: friends[i].displayName,
-                        otherPhotoUrl:    friends[i].photoUrl,
-                        isOnline:         friends[i].isOnline,
-                      ))),
-                  onRemove: () async {
-                    await _fsvc.removeFriend(friends[i].uid);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(_snack(
-                          '${friends[i].displayName} removed'));
-                    }
-                  },
-                ));
-        });
+      return ListView.builder(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+        itemCount: friends.length,
+        itemBuilder: (_, i) => _FriendTile(
+          friend: friends[i],
+          fsvc: _fsvc,
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => DmScreen(
+                otherUid:         friends[i].uid,
+                otherUsername:    friends[i].username,
+                otherDisplayName: friends[i].displayName,
+                otherPhotoUrl:    friends[i].photoUrl,
+              ))),
+          onRemove: () async {
+            await _fsvc.removeFriend(friends[i].uid);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(_snack(
+                  '${friends[i].displayName} removed'));
+            }
+          },
+        ),
+      );
     });
 
   // ══════════════════════════════════════════════════════════════
@@ -378,14 +370,12 @@ class _InboxTile extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════
 class _FriendTile extends StatelessWidget {
   final FriendModel  friend;
-  final int          unread;
   final FriendService fsvc;
   final VoidCallback onTap;
   final VoidCallback onRemove;
 
   const _FriendTile({
     required this.friend,
-    required this.unread,
     required this.fsvc,
     required this.onTap,
     required this.onRemove,
@@ -445,16 +435,6 @@ class _FriendTile extends StatelessWidget {
             ]),
           ])),
           Row(mainAxisSize: MainAxisSize.min, children: [
-            if (unread > 0)
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                    color: const Color(0xFF6C63FF),
-                    borderRadius: BorderRadius.circular(12)),
-                child: Text('$unread', style: const TextStyle(
-                    color: Colors.white, fontSize: 11,
-                    fontWeight: FontWeight.w800))),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(

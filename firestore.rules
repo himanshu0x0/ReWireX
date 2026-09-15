@@ -1,10 +1,12 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════════
     // HELPER FUNCTIONS
     // ══════════════════════════════════════════════════════════════
+
     function isAuth() {
       return request.auth != null;
     }
@@ -26,6 +28,7 @@ service cloud.firestore {
     // ══════════════════════════════════════════════════════════════
     // USERS
     // ══════════════════════════════════════════════════════════════
+
     match /users/{userId} {
       // Any authenticated user can read profiles (needed for search,
       // online status streams, and recipient info lookup).
@@ -83,6 +86,25 @@ service cloud.firestore {
       match /analytics/{doc} {
         allow read, write: if isOwner(userId);
       }
+
+      // ── Urge logs ──────────────────────────────────────────────
+      match /urge_logs/{urgeId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // ── Complete Urge Rescue sessions ──────────────────────────
+      match /urge_sessions/{sessionId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+                      && request.resource.data.userId == request.auth.uid;
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      // ── Urge solution / intervention feedback ──────────────────
+      match /intervention_feedback/{docId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -108,12 +130,10 @@ service cloud.firestore {
       match /messages/{msgId} {
         // Both participants can read all messages.
         allow read: if isThreadParticipant(threadId);
-
         // Only participants can create; sender must be self.
         allow create: if isThreadParticipant(threadId)
                       && (request.resource.data.senderId == request.auth.uid
                           || request.resource.data.senderId == 'system');
-
         // Allow update for:
         //   • Status changes (delivered / read) — by either participant
         //   • Soft delete — only by sender
@@ -128,7 +148,6 @@ service cloud.firestore {
                         (request.resource.data.diff(resource.data).affectedKeys()
                             .hasOnly(['status', 'reactions']))
                       );
-
         // No hard deletes from client
         allow delete: if false;
       }
@@ -145,13 +164,13 @@ service cloud.firestore {
     // ══════════════════════════════════════════════════════════════
     // GAME ROOMS
     // ══════════════════════════════════════════════════════════════
+
     match /game_rooms/{roomId} {
       allow read:   if isAuth();
       allow create: if isAuth();
       allow update, delete: if isAuth()
                             && resource.data.players != null
                             && request.auth.uid in resource.data.players;
-
       match /moves/{moveId} {
         allow read:   if isAuth();
         allow create: if isAuth();
@@ -163,6 +182,7 @@ service cloud.firestore {
     // ══════════════════════════════════════════════════════════════
     // POSTS
     // ══════════════════════════════════════════════════════════════
+
     match /posts/{postId} {
       allow read:   if isAuth();
       allow create: if isAuth()
@@ -174,8 +194,10 @@ service cloud.firestore {
     // ══════════════════════════════════════════════════════════════
     // NOTIFICATIONS
     // ══════════════════════════════════════════════════════════════
+
     match /notifications/{userId}/items/{notifId} {
       allow read, write: if isOwner(userId);
     }
+
   }
 }
